@@ -5,7 +5,7 @@ A campus resource platform for seat reservations, classroom approvals, and maint
 
 ## 从这里开始
 
-1. 看[课程交付清单](课程交付清单.md)，了解必交成果与评审要求。
+1. 看[课程交付清单](docs/课程交付清单.md)，了解必交成果与评审要求。
 2. 看[AGENTS.md](AGENTS.md)，了解 agent、Git 和评审约定。
 3. 看[Stage 1 工作说明](docs/planning/R1/README.md)，进入自己模块的文档。
 
