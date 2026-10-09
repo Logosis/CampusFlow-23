@@ -1,0 +1,13 @@
+# 本地凭据；示例文件只能包含占位值
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# 本地工作产物
+*.log
+__pycache__/
+/tmp/
+.DS_Store
+Thumbs.db
