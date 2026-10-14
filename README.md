@@ -1,12 +1,12 @@
 # CampusFlow-23
-A campus resource platform for seat reservations, classroom approvals, and maintenance requests.
 
-当前阶段：Stage 1 / R1，整理模块需求与依赖；尚未开始软件实现。
+校园座位预约、整教室审批与物业报修项目。
 
-## 从这里开始
+**当前：开发约定v1和共同接入基础已建立；业务尚未实现。**
 
-1. 看[课程交付清单](docs/课程交付清单.md)，了解必交成果与评审要求。
-2. 看[AGENTS.md](AGENTS.md)，了解 agent、Git 和评审约定。
-3. 看[Stage 1 工作说明](docs/planning/R1/README.md)，进入自己模块的文档。
+1. 开始写代码：[开发指导](docs/开发指导.md)——语言、目录、启动、公共规则、初始业务边界与集成验收。
+2. 实现哪些服务：[R1模块入口](docs/planning/R1/README.md)——D、M1、M2、M3的服务编号和精确输入返回。
+3. 怎样提交：[AGENTS.md](AGENTS.md)——本地改动、分支、提交、PR和实际评审。
+4. 最后交什么：[课程交付清单](docs/课程交付清单.md)，来源是[课程任务书](Pj-任务书.pdf)。
 
-[课程原任务书](Pj-任务书.pdf)原样保存。课程要求、示例、建议与本组提案在整理文档中分别标注。
+配置与数据库密码由本地生成，不提交。未实现接口返回503，seed明确报未实现；共同基础能启动不代表业务完成或集成通过。
