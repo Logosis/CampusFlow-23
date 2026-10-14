@@ -23,10 +23,12 @@ DIRECT = {
            "get_opening_times", "set_opening_times", "search_seats", "reserve_seat",
            "get_check_in_code", "check_in", "get_my_reservations", "get_my_reservation", "get_usage"},
     "m2": {"get_allowed_actions", "submit_application", "get_approval_tasks", "submit_approval",
-           "get_application"},
+           "get_application", "get_classroom_options", "get_applications", "cancel_application",
+           "get_maintenance_impact", "get_approval_config", "update_approval_config"},
     "m3": {"report_fault", "get_dispatch_tasks", "dispatch_order", "get_work_tasks", "start_repair",
            "submit_completion", "submit_acceptance", "submit_evaluation",
-           "get_dispatch_candidates", "get_report_locations"},
+           "get_dispatch_candidates", "get_report_locations", "get_work_orders", "get_work_order",
+           "cancel_work_order", "get_maintenance_stats"},
 }
 USER_ONLY = {"get_identity", "manage_roles", "maintain_master", "manage_public_config",
              "get_approval_config", "update_approval_config", "get_timeout_config", "update_timeout_config"}

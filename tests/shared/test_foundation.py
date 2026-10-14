@@ -63,13 +63,45 @@ def test_every_registered_business_placeholder_fails_instead_of_fake_success():
                 assert result.json()["ok"] is False
                 assert result.json()["data"] is None
 
-def test_router_rejects_unknown_duplicate_and_disabled_optional_paths():
-    for paths in [("/invented",), ("/login", "/login"), ("/get_applications",)]:
+def test_router_rejects_unknown_and_duplicate_paths():
+    for paths in [("/invented",), ("/login", "/login")]:
         router = APIRouter()
         for path in paths:
             router.add_api_route(path, lambda: success({}), methods=["POST"])
         with pytest.raises(ValueError):
-            create_app("m2" if paths == ("/get_applications",) else "d", router)
+            create_app("d", router)
+
+def test_newly_required_frontend_routes_register_and_still_require_identity(monkeypatch):
+    # 仅验证共同路由与身份门槛；端点和D身份返回是测试替身，不代表业务完成。
+    async def identity_call(config, module, function, payload, actor):
+        assert (module, function, payload) == ("d", "get_identity", {})
+        assert actor.mode == "USER"
+        return {"userId": "u1", "accountStatus": "ACTIVE"}
+    monkeypatch.setattr("backend.shared.auth.call_peer", identity_call)
+    functions = {
+        "m2": ["get_applications", "cancel_application", "get_maintenance_impact",
+               "get_approval_config", "update_approval_config", "get_classroom_options"],
+        "m3": ["get_work_orders", "get_work_order", "cancel_work_order", "get_maintenance_stats"],
+    }
+    for module, names in functions.items():
+        router = APIRouter()
+        async def endpoint(request: Request):
+            return success({"userId": request.state.identity["userId"]})
+        for name in names:
+            assert SERVICES[module][name]["required"] is True
+            router.add_api_route(f"/{name}", endpoint, methods=["POST"])
+        app = create_app(module, router)
+        app.state.settings = settings(module)
+        with TestClient(app) as client:
+            missing = client.get("/health").json()["data"]["unfinishedFunctions"]
+            assert not set(names).intersection(missing)
+            for name in names:
+                path = f"/api/v1/{module}/{name}"
+                assert client.post(path, json={}).status_code == 401
+                headers = {"Authorization": "Bearer user"}
+                assert client.post(path, json={}, headers=headers).json()["data"] == {"userId": "u1"}
+                assert client.post(path, json={}, headers=headers | {"X-Actor-Mode": "SYSTEM"}).status_code == 422
+                assert client.post(path, json={}, headers={"X-Service-Credential": "secret-d", "X-Actor-Mode": "SYSTEM"}).status_code == 403
 
 def test_validation_unknown_route_and_exceptions_have_common_envelope():
     class Login(InputModel):

@@ -534,14 +534,14 @@
     "notificationRetryLimit": 2,
     "credentialLifetimeSeconds": 28800
   },
-  "optionalFeatures": {
-    "M2_F05": false,
-    "M2_F06": false,
-    "M2_F07": false,
-    "M2_F08": false,
-    "M3_F06": false,
-    "M3_F07": false,
-    "M3_F08": false
+  "requiredFeatures": {
+    "M2_F05": true,
+    "M2_F06": true,
+    "M2_F07": true,
+    "M2_F08": true,
+    "M3_F06": true,
+    "M3_F07": true,
+    "M3_F08": true
   },
   "permissionScopeTypes": {
     "d.audit.append": [

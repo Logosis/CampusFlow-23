@@ -17,8 +17,6 @@ def create_app(module: str, router: APIRouter, tick=None) -> FastAPI:
             raise ValueError(f"{module}: 未登记的公开路径或方法 {route.path}")
         if name in implemented:
             raise ValueError(f"{module}: 重复路径 {name}")
-        if not known[name]["required"]:
-            raise ValueError(f"{module}: 可选服务尚未启用 {name}")
         implemented.add(name)
 
     async def worker(app):
@@ -88,7 +86,7 @@ def create_app(module: str, router: APIRouter, tick=None) -> FastAPI:
     app.include_router(router, prefix=f"/api/v1/{module}")
     def unfinished(name):
         async def endpoint(input: dict = Body(...)):
-            raise ApiError("UNAVAILABLE", f"{module.upper()}.{name}尚未实现或未启用")
+            raise ApiError("UNAVAILABLE", f"{module.upper()}.{name}尚未实现")
         return endpoint
     for name in known:
         if name not in implemented:

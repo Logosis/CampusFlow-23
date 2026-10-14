@@ -1,4 +1,4 @@
-"""公开路径与服务编号；可选服务默认关闭。"""
+"""公开路径与服务编号；本轮全部接口均为必做。"""
 SERVICES = {
     "d": {
         "login": {
@@ -143,11 +143,11 @@ SERVICES = {
         },
         "get_applications": {
             "serviceId": "M2-S06",
-            "required": False
+            "required": True
         },
         "cancel_application": {
             "serviceId": "M2-S07",
-            "required": False
+            "required": True
         },
         "get_approval_config": {
             "serviceId": "M2-S08",
@@ -159,7 +159,7 @@ SERVICES = {
         },
         "get_maintenance_impact": {
             "serviceId": "M2-S09",
-            "required": False
+            "required": True
         },
         "get_classroom_options": {
             "serviceId": "M2-S10",
@@ -201,19 +201,19 @@ SERVICES = {
         },
         "get_work_orders": {
             "serviceId": "M3-S09",
-            "required": False
+            "required": True
         },
         "get_work_order": {
             "serviceId": "M3-S09",
-            "required": False
+            "required": True
         },
         "cancel_work_order": {
             "serviceId": "M3-S10",
-            "required": False
+            "required": True
         },
         "get_maintenance_stats": {
             "serviceId": "M3-S11",
-            "required": False
+            "required": True
         },
         "get_timeout_config": {
             "serviceId": "M3-S12",
