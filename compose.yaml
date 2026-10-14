@@ -1,0 +1,124 @@
+name: campusflow23
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: campusflow_root
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run scripts/configure.py}
+      D_DB_PASSWORD: ${D_DB_PASSWORD:?run scripts/configure.py}
+      M1_DB_PASSWORD: ${M1_DB_PASSWORD:?run scripts/configure.py}
+      M2_DB_PASSWORD: ${M2_DB_PASSWORD:?run scripts/configure.py}
+      M3_DB_PASSWORD: ${M3_DB_PASSWORD:?run scripts/configure.py}
+    ports: ["127.0.0.1:5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./infra/postgres-init.sh:/docker-entrypoint-initdb.d/10-campusflow.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U campusflow_root -d postgres"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+  mailpit:
+    image: axllent/mailpit:v1.29
+    ports: ["127.0.0.1:1025:1025", "127.0.0.1:8025:8025"]
+  d:
+    build: .
+    command: ["uv", "run", "--no-sync", "python", "scripts/container_start.py"]
+    env_file: .env
+    environment:
+      APP_MODULE: d
+      DATABASE_URL: postgresql+psycopg://campusflow_d:${D_DB_PASSWORD:?run configure}@postgres:5432/campusflow_d
+      D_BASE_URL: http://d:8000
+      M1_BASE_URL: http://m1:8000
+      M2_BASE_URL: http://m2:8000
+      M3_BASE_URL: http://m3:8000
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      TEST_CLOCK_FILE: /run/campusflow-clock/now.txt
+    ports: ["127.0.0.1:8010:8000"]
+    volumes:
+      - ./backend:/app/backend:ro
+      - ./tmp/clock:/run/campusflow-clock:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+  m1:
+    build: .
+    command: ["uv", "run", "--no-sync", "python", "scripts/container_start.py"]
+    env_file: .env
+    environment:
+      APP_MODULE: m1
+      DATABASE_URL: postgresql+psycopg://campusflow_m1:${M1_DB_PASSWORD:?run configure}@postgres:5432/campusflow_m1
+      D_BASE_URL: http://d:8000
+      M1_BASE_URL: http://m1:8000
+      M2_BASE_URL: http://m2:8000
+      M3_BASE_URL: http://m3:8000
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      TEST_CLOCK_FILE: /run/campusflow-clock/now.txt
+    ports: ["127.0.0.1:8011:8000"]
+    volumes:
+      - ./backend:/app/backend:ro
+      - ./tmp/clock:/run/campusflow-clock:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+  m2:
+    build: .
+    command: ["uv", "run", "--no-sync", "python", "scripts/container_start.py"]
+    env_file: .env
+    environment:
+      APP_MODULE: m2
+      DATABASE_URL: postgresql+psycopg://campusflow_m2:${M2_DB_PASSWORD:?run configure}@postgres:5432/campusflow_m2
+      D_BASE_URL: http://d:8000
+      M1_BASE_URL: http://m1:8000
+      M2_BASE_URL: http://m2:8000
+      M3_BASE_URL: http://m3:8000
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      TEST_CLOCK_FILE: /run/campusflow-clock/now.txt
+    ports: ["127.0.0.1:8012:8000"]
+    volumes:
+      - ./backend:/app/backend:ro
+      - ./tmp/clock:/run/campusflow-clock:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+  m3:
+    build: .
+    command: ["uv", "run", "--no-sync", "python", "scripts/container_start.py"]
+    env_file: .env
+    environment:
+      APP_MODULE: m3
+      DATABASE_URL: postgresql+psycopg://campusflow_m3:${M3_DB_PASSWORD:?run configure}@postgres:5432/campusflow_m3
+      D_BASE_URL: http://d:8000
+      M1_BASE_URL: http://m1:8000
+      M2_BASE_URL: http://m2:8000
+      M3_BASE_URL: http://m3:8000
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+      TEST_CLOCK_FILE: /run/campusflow-clock/now.txt
+    ports: ["127.0.0.1:8013:8000"]
+    volumes:
+      - ./backend:/app/backend:ro
+      - ./tmp/clock:/run/campusflow-clock:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+  gateway:
+    image: nginx:1.28-alpine
+    ports: ["127.0.0.1:8080:80"]
+    volumes:
+      - ./infra/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./frontend:/usr/share/nginx/html:ro
+    depends_on: [d, m1, m2, m3]
+volumes:
+  pgdata:

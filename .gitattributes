@@ -1,5 +1,2 @@
-* text=auto
-.gitattributes text eol=lf
-.gitignore text eol=lf
-*.md text eol=lf
+* text=auto eol=lf
 *.pdf binary

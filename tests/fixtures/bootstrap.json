@@ -1,0 +1,727 @@
+{
+  "description": "仅隔离本地开发与集成测试；测试账号不得作为正式部署初始账号。",
+  "password": "CampusFlow-Test-123!",
+  "permissions": [
+    "d.audit.append",
+    "d.audit.read",
+    "d.config.manage",
+    "d.config.read",
+    "d.master.manage",
+    "d.master.read",
+    "d.notify.read",
+    "d.notify.send",
+    "d.people.read",
+    "d.rbac.manage",
+    "d.rbac.read",
+    "m1.check_in_code.read",
+    "m1.config.manage",
+    "m1.config.read",
+    "m1.opening.manage",
+    "m1.opening.read",
+    "m1.reservation.check_in",
+    "m1.reservation.create",
+    "m1.reservation.read",
+    "m1.seat.read",
+    "m1.usage.read",
+    "m2.application.cancel",
+    "m2.application.read",
+    "m2.application.read_all",
+    "m2.application.submit",
+    "m2.approval.approve",
+    "m2.config.manage",
+    "m2.config.read",
+    "m3.acceptance.manage",
+    "m3.config.manage",
+    "m3.config.read",
+    "m3.dispatch.manage",
+    "m3.escalation.receive",
+    "m3.evaluation.create",
+    "m3.repair.manage",
+    "m3.statistics.read",
+    "m3.work_order.cancel",
+    "m3.work_order.read",
+    "m3.work_order.read_all",
+    "m3.work_order.report"
+  ],
+  "roles": {
+    "admin": {
+      "permissionCodes": [
+        "d.audit.append",
+        "d.audit.read",
+        "d.config.manage",
+        "d.config.read",
+        "d.master.manage",
+        "d.master.read",
+        "d.notify.read",
+        "d.notify.send",
+        "d.people.read",
+        "d.rbac.manage",
+        "d.rbac.read",
+        "m1.check_in_code.read",
+        "m1.config.manage",
+        "m1.config.read",
+        "m1.opening.manage",
+        "m1.opening.read",
+        "m1.reservation.check_in",
+        "m1.reservation.create",
+        "m1.reservation.read",
+        "m1.seat.read",
+        "m1.usage.read",
+        "m2.application.read",
+        "m2.application.submit",
+        "m2.approval.approve",
+        "m2.config.manage",
+        "m2.config.read",
+        "m3.acceptance.manage",
+        "m3.config.manage",
+        "m3.config.read",
+        "m3.dispatch.manage",
+        "m3.escalation.receive",
+        "m3.evaluation.create",
+        "m3.repair.manage",
+        "m3.work_order.read",
+        "m3.work_order.report"
+      ],
+      "scope": {
+        "type": "GLOBAL",
+        "id": null
+      },
+      "roleId": "r-admin",
+      "name": "admin",
+      "status": "ACTIVE",
+      "version": 1
+    },
+    "student": {
+      "permissionCodes": [
+        "d.master.read",
+        "d.notify.send",
+        "d.audit.append",
+        "m1.seat.read",
+        "m1.reservation.create",
+        "m1.reservation.check_in",
+        "m1.reservation.read",
+        "m2.application.submit",
+        "m2.application.read",
+        "m3.work_order.report",
+        "m3.evaluation.create"
+      ],
+      "scope": {
+        "type": "GLOBAL",
+        "id": null
+      },
+      "roleId": "r-student",
+      "name": "student",
+      "status": "ACTIVE",
+      "version": 1
+    },
+    "approver": {
+      "permissionCodes": [
+        "d.master.read",
+        "d.notify.send",
+        "d.audit.append",
+        "d.people.read",
+        "m2.approval.approve",
+        "m2.application.read"
+      ],
+      "scope": {
+        "type": "GLOBAL",
+        "id": null
+      },
+      "roleId": "r-approver",
+      "name": "approver",
+      "status": "ACTIVE",
+      "version": 1
+    },
+    "dispatcher": {
+      "permissionCodes": [
+        "d.master.read",
+        "d.notify.send",
+        "d.audit.append",
+        "d.people.read",
+        "m3.dispatch.manage"
+      ],
+      "scope": {
+        "type": "GLOBAL",
+        "id": null
+      },
+      "roleId": "r-dispatcher",
+      "name": "dispatcher",
+      "status": "ACTIVE",
+      "version": 1
+    },
+    "technician": {
+      "permissionCodes": [
+        "d.master.read",
+        "d.notify.send",
+        "d.audit.append",
+        "d.people.read",
+        "m3.repair.manage"
+      ],
+      "scope": {
+        "type": "GLOBAL",
+        "id": null
+      },
+      "roleId": "r-technician",
+      "name": "technician",
+      "status": "ACTIVE",
+      "version": 1
+    },
+    "inspector": {
+      "permissionCodes": [
+        "d.master.read",
+        "d.notify.send",
+        "d.audit.append",
+        "d.people.read",
+        "m3.acceptance.manage"
+      ],
+      "scope": {
+        "type": "GLOBAL",
+        "id": null
+      },
+      "roleId": "r-inspector",
+      "name": "inspector",
+      "status": "ACTIVE",
+      "version": 1
+    },
+    "supervisor": {
+      "permissionCodes": [
+        "m3.escalation.receive"
+      ],
+      "scope": {
+        "type": "GLOBAL",
+        "id": null
+      },
+      "roleId": "r-supervisor",
+      "name": "supervisor",
+      "status": "ACTIVE",
+      "version": 1
+    },
+    "screen": {
+      "permissionCodes": [
+        "m1.check_in_code.read",
+        "d.master.read"
+      ],
+      "scope": {
+        "type": "SPACE",
+        "id": "sp-school"
+      },
+      "roleId": "r-screen",
+      "name": "screen",
+      "status": "ACTIVE",
+      "version": 1
+    }
+  },
+  "users": [
+    {
+      "userId": "u-admin",
+      "account": "admin",
+      "displayName": "admin",
+      "departmentId": null,
+      "roleIds": [
+        "r-admin"
+      ],
+      "accountStatus": "ACTIVE",
+      "email": "admin@example.test"
+    },
+    {
+      "userId": "u-student1",
+      "account": "student1",
+      "displayName": "student1",
+      "departmentId": "dep-cs",
+      "roleIds": [
+        "r-student"
+      ],
+      "accountStatus": "ACTIVE",
+      "email": "student1@example.test"
+    },
+    {
+      "userId": "u-student2",
+      "account": "student2",
+      "displayName": "student2",
+      "departmentId": "dep-ee",
+      "roleIds": [
+        "r-student"
+      ],
+      "accountStatus": "ACTIVE",
+      "email": "student2@example.test"
+    },
+    {
+      "userId": "u-approver1",
+      "account": "approver1",
+      "displayName": "approver1",
+      "departmentId": "dep-cs",
+      "roleIds": [
+        "r-approver"
+      ],
+      "accountStatus": "ACTIVE",
+      "email": "approver1@example.test"
+    },
+    {
+      "userId": "u-approver2",
+      "account": "approver2",
+      "displayName": "approver2",
+      "departmentId": "dep-ee",
+      "roleIds": [
+        "r-approver"
+      ],
+      "accountStatus": "ACTIVE",
+      "email": "approver2@example.test"
+    },
+    {
+      "userId": "u-dispatcher",
+      "account": "dispatcher",
+      "displayName": "dispatcher",
+      "departmentId": null,
+      "roleIds": [
+        "r-dispatcher"
+      ],
+      "accountStatus": "ACTIVE",
+      "email": "dispatcher@example.test"
+    },
+    {
+      "userId": "u-technician",
+      "account": "technician",
+      "displayName": "technician",
+      "departmentId": null,
+      "roleIds": [
+        "r-technician"
+      ],
+      "accountStatus": "ACTIVE",
+      "email": "technician@example.test"
+    },
+    {
+      "userId": "u-inspector",
+      "account": "inspector",
+      "displayName": "inspector",
+      "departmentId": null,
+      "roleIds": [
+        "r-inspector"
+      ],
+      "accountStatus": "ACTIVE",
+      "email": "inspector@example.test"
+    },
+    {
+      "userId": "u-supervisor",
+      "account": "supervisor",
+      "displayName": "supervisor",
+      "departmentId": null,
+      "roleIds": [
+        "r-supervisor"
+      ],
+      "accountStatus": "ACTIVE",
+      "email": "supervisor@example.test"
+    },
+    {
+      "userId": "u-screen",
+      "account": "screen",
+      "displayName": "screen",
+      "departmentId": null,
+      "roleIds": [
+        "r-screen"
+      ],
+      "accountStatus": "ACTIVE",
+      "email": "screen@example.test"
+    }
+  ],
+  "departments": [
+    {
+      "departmentId": "dep-cs",
+      "name": "计算机系"
+    },
+    {
+      "departmentId": "dep-ee",
+      "name": "电子系"
+    }
+  ],
+  "spaces": [
+    {
+      "spaceId": "sp-school",
+      "name": "公共自习室",
+      "location": "测试楼101",
+      "isStudyRoom": true,
+      "ownerKind": "SCHOOL",
+      "departmentId": null,
+      "registered": true,
+      "enabled": true,
+      "version": 1
+    },
+    {
+      "spaceId": "sp-cs",
+      "name": "计算机系自习室",
+      "location": "测试楼102",
+      "isStudyRoom": true,
+      "ownerKind": "DEPARTMENT",
+      "departmentId": "dep-cs",
+      "registered": true,
+      "enabled": true,
+      "version": 1
+    }
+  ],
+  "seats": [
+    {
+      "seatId": "seat-school-1",
+      "seatCode": "TEST-S-001",
+      "spaceId": "sp-school",
+      "registered": true,
+      "enabled": true,
+      "socketTags": [
+        "FIXED"
+      ],
+      "version": 1
+    },
+    {
+      "seatId": "seat-school-2",
+      "seatCode": "TEST-S-002",
+      "spaceId": "sp-school",
+      "registered": true,
+      "enabled": true,
+      "socketTags": [
+        "RAIL"
+      ],
+      "version": 1
+    },
+    {
+      "seatId": "seat-cs-1",
+      "seatCode": "TEST-C-001",
+      "spaceId": "sp-cs",
+      "registered": true,
+      "enabled": true,
+      "socketTags": [],
+      "version": 1
+    }
+  ],
+  "systemGrants": {
+    "m1": {
+      "permissionCodes": [
+        "d.master.read",
+        "d.notify.send",
+        "d.notify.read",
+        "d.audit.append",
+        "d.audit.read"
+      ],
+      "scope": {
+        "type": "GLOBAL",
+        "id": null
+      }
+    },
+    "m2": {
+      "permissionCodes": [
+        "d.master.read",
+        "d.people.read",
+        "d.notify.send",
+        "d.notify.read",
+        "d.audit.append",
+        "d.audit.read"
+      ],
+      "scope": {
+        "type": "GLOBAL",
+        "id": null
+      }
+    },
+    "m3": {
+      "permissionCodes": [
+        "d.master.read",
+        "d.people.read",
+        "d.notify.send",
+        "d.notify.read",
+        "d.audit.append",
+        "d.audit.read"
+      ],
+      "scope": {
+        "type": "GLOBAL",
+        "id": null
+      }
+    }
+  },
+  "m1": {
+    "maxReservationHours": 4,
+    "opening": {
+      "campusStart": "08:00",
+      "campusEnd": "22:00",
+      "days": 7,
+      "base": "utc_now()所在校园日期",
+      "version": 1
+    },
+    "checkIntervalSeconds": 1
+  },
+  "m2": {
+    "version": 1,
+    "applicationScopes": [
+      {
+        "type": "GLOBAL",
+        "id": null
+      }
+    ],
+    "approvalLevels": [
+      {
+        "level": 1,
+        "approverId": "u-approver1"
+      },
+      {
+        "level": 2,
+        "approverId": "u-approver2"
+      }
+    ],
+    "clockStart": "CURRENT_LEVEL",
+    "timeoutSeconds": 86400,
+    "checkIntervalSeconds": 60
+  },
+  "m3": {
+    "version": 1,
+    "checkIntervalSeconds": 60,
+    "rules": [
+      {
+        "ruleId": "timeout-waiting_assignment",
+        "stage": "WAITING_ASSIGNMENT",
+        "scope": {
+          "type": "GLOBAL",
+          "id": null
+        },
+        "clockStart": "STAGE_ENTERED_AT",
+        "timeoutSeconds": 86400,
+        "recipientPermissionCodes": [
+          "m3.escalation.receive"
+        ],
+        "action": "NOTIFY"
+      },
+      {
+        "ruleId": "timeout-assigned",
+        "stage": "ASSIGNED",
+        "scope": {
+          "type": "GLOBAL",
+          "id": null
+        },
+        "clockStart": "STAGE_ENTERED_AT",
+        "timeoutSeconds": 86400,
+        "recipientPermissionCodes": [
+          "m3.escalation.receive"
+        ],
+        "action": "NOTIFY"
+      },
+      {
+        "ruleId": "timeout-repairing",
+        "stage": "REPAIRING",
+        "scope": {
+          "type": "GLOBAL",
+          "id": null
+        },
+        "clockStart": "STAGE_ENTERED_AT",
+        "timeoutSeconds": 86400,
+        "recipientPermissionCodes": [
+          "m3.escalation.receive"
+        ],
+        "action": "NOTIFY"
+      },
+      {
+        "ruleId": "timeout-waiting_acceptance",
+        "stage": "WAITING_ACCEPTANCE",
+        "scope": {
+          "type": "GLOBAL",
+          "id": null
+        },
+        "clockStart": "STAGE_ENTERED_AT",
+        "timeoutSeconds": 86400,
+        "recipientPermissionCodes": [
+          "m3.escalation.receive"
+        ],
+        "action": "NOTIFY"
+      }
+    ]
+  },
+  "d": {
+    "authMethod": "PASSWORD",
+    "notificationChannel": "EMAIL",
+    "notificationRetryLimit": 2,
+    "credentialLifetimeSeconds": 28800
+  },
+  "optionalFeatures": {
+    "M2_F05": false,
+    "M2_F06": false,
+    "M2_F07": false,
+    "M2_F08": false,
+    "M3_F06": false,
+    "M3_F07": false,
+    "M3_F08": false
+  },
+  "permissionScopeTypes": {
+    "d.audit.append": [
+      "GLOBAL",
+      "DEPARTMENT",
+      "SPACE"
+    ],
+    "d.audit.read": [
+      "GLOBAL",
+      "DEPARTMENT",
+      "SPACE"
+    ],
+    "d.config.manage": [
+      "GLOBAL"
+    ],
+    "d.config.read": [
+      "GLOBAL"
+    ],
+    "d.master.manage": [
+      "GLOBAL",
+      "DEPARTMENT",
+      "SPACE"
+    ],
+    "d.master.read": [
+      "GLOBAL",
+      "DEPARTMENT",
+      "SPACE"
+    ],
+    "d.notify.read": [
+      "GLOBAL",
+      "DEPARTMENT",
+      "SPACE"
+    ],
+    "d.notify.send": [
+      "GLOBAL",
+      "DEPARTMENT",
+      "SPACE"
+    ],
+    "d.people.read": [
+      "GLOBAL",
+      "DEPARTMENT",
+      "SPACE"
+    ],
+    "d.rbac.manage": [
+      "GLOBAL"
+    ],
+    "d.rbac.read": [
+      "GLOBAL"
+    ],
+    "m1.check_in_code.read": [
+      "GLOBAL",
+      "SPACE"
+    ],
+    "m1.config.manage": [
+      "GLOBAL"
+    ],
+    "m1.config.read": [
+      "GLOBAL"
+    ],
+    "m1.opening.manage": [
+      "GLOBAL",
+      "DEPARTMENT",
+      "SPACE"
+    ],
+    "m1.opening.read": [
+      "GLOBAL",
+      "DEPARTMENT",
+      "SPACE"
+    ],
+    "m1.reservation.check_in": [
+      "GLOBAL",
+      "DEPARTMENT",
+      "SPACE"
+    ],
+    "m1.reservation.create": [
+      "GLOBAL",
+      "DEPARTMENT",
+      "SPACE"
+    ],
+    "m1.reservation.read": [
+      "GLOBAL",
+      "DEPARTMENT",
+      "SPACE"
+    ],
+    "m1.seat.read": [
+      "GLOBAL",
+      "DEPARTMENT",
+      "SPACE"
+    ],
+    "m1.usage.read": [
+      "GLOBAL",
+      "DEPARTMENT",
+      "SPACE"
+    ],
+    "m2.application.cancel": [
+      "GLOBAL",
+      "DEPARTMENT",
+      "SPACE"
+    ],
+    "m2.application.read": [
+      "GLOBAL",
+      "DEPARTMENT",
+      "SPACE"
+    ],
+    "m2.application.read_all": [
+      "GLOBAL",
+      "DEPARTMENT",
+      "SPACE"
+    ],
+    "m2.application.submit": [
+      "GLOBAL",
+      "DEPARTMENT",
+      "SPACE"
+    ],
+    "m2.approval.approve": [
+      "GLOBAL",
+      "DEPARTMENT",
+      "SPACE"
+    ],
+    "m2.config.manage": [
+      "GLOBAL"
+    ],
+    "m2.config.read": [
+      "GLOBAL"
+    ],
+    "m3.acceptance.manage": [
+      "GLOBAL",
+      "DEPARTMENT",
+      "SPACE"
+    ],
+    "m3.config.manage": [
+      "GLOBAL"
+    ],
+    "m3.config.read": [
+      "GLOBAL"
+    ],
+    "m3.dispatch.manage": [
+      "GLOBAL",
+      "DEPARTMENT",
+      "SPACE"
+    ],
+    "m3.escalation.receive": [
+      "GLOBAL",
+      "DEPARTMENT",
+      "SPACE"
+    ],
+    "m3.evaluation.create": [
+      "GLOBAL",
+      "DEPARTMENT",
+      "SPACE"
+    ],
+    "m3.repair.manage": [
+      "GLOBAL",
+      "DEPARTMENT",
+      "SPACE"
+    ],
+    "m3.statistics.read": [
+      "GLOBAL",
+      "DEPARTMENT",
+      "SPACE"
+    ],
+    "m3.work_order.cancel": [
+      "GLOBAL",
+      "DEPARTMENT",
+      "SPACE"
+    ],
+    "m3.work_order.read": [
+      "GLOBAL",
+      "DEPARTMENT",
+      "SPACE"
+    ],
+    "m3.work_order.read_all": [
+      "GLOBAL",
+      "DEPARTMENT",
+      "SPACE"
+    ],
+    "m3.work_order.report": [
+      "GLOBAL",
+      "DEPARTMENT",
+      "SPACE"
+    ]
+  }
+}

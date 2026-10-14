@@ -8,6 +8,12 @@
 # 本地工作产物
 *.log
 __pycache__/
+.venv/
+.cache/
+.pytest_cache/
+*.egg-info/
+build/
+dist/
 /tmp/
 .DS_Store
 Thumbs.db
