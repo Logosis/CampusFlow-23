@@ -186,8 +186,10 @@ def _scan_due():
             state = WorkerState(name='timeout', last_run=None)
             session.add(state)
         interval = cfg['checkIntervalSeconds']
-        if interval is None or state.last_run and now < state.last_run + timedelta(seconds=interval):
-            return
+        if interval is None:
+            return False
+        if state.last_run and now < state.last_run + timedelta(seconds=interval):
+            return True
         # WorkOrder lock serializes timeout against acceptance/cancel/state transitions.
         orders = list(session.scalars(select(WorkOrder).where(WorkOrder.status.in_(db.ACTIVE))
             .order_by(WorkOrder.id).with_for_update()))
@@ -204,6 +206,7 @@ def _scan_due():
             db.notify(session, w, event, 'M3_TIMEOUT_ESCALATED', '工单阶段超时',
                 selector=dict(purpose='ESCALATION', permissionCodes=cycle.rule['recipientPermissionCodes']))
         state.last_run = now
+    return True
 
 
 def _compensation_due():
@@ -221,6 +224,9 @@ def _compensation_due():
 
 
 async def tick():
-    _scan_due()
-    if _compensation_due() and await process_jobs():
+    configured = _scan_due()
+    failed = _compensation_due() and await process_jobs()
+    if not configured:
+        raise ApiError('UNAVAILABLE', 'M3超时规则尚未初始化')
+    if failed:
         raise ApiError('UNAVAILABLE', 'M3存在未确认的同步、通知或审计，请查看模块日志与原请求记录')

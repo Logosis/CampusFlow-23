@@ -50,6 +50,11 @@ def in_scope(scope, order):
 
 
 def enter_stage(session, order, stage, now):
+    previous = session.scalar(select(StageCycle).where(StageCycle.work_order_id == order.id,
+        StageCycle.stage == order.status, StageCycle.exited_at.is_(None))
+        .order_by(StageCycle.cycle.desc()).limit(1))
+    if previous:
+        previous.exited_at = now
     order.status = stage
     order.stage_entered_at = now
     if stage not in ACTIVE:
@@ -69,7 +74,7 @@ def enter_stage(session, order, stage, now):
     session.add(StageCycle(id=uid(), work_order_id=order.id, stage=stage, cycle=cycle,
         config_version=cfg['version'], rule=rule,
         due_at=due,
-        entered_at=now, escalation_id=None))
+        entered_at=now, escalation_id=None, exited_at=None))
     order.timeout_config_version = cfg['version'] if rule else None
 
 

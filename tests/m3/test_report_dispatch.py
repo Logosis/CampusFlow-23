@@ -106,3 +106,14 @@ def test_replays_check_current_permission_but_not_old_business_eligibility(call,
 ])
 def test_optional_fields_omitted_not_null(call, function, body, token):
     call(function, body, token, status=422)
+
+
+def test_permission_subject_and_people_contract_mismatch_are_unavailable(call, peers_double):
+    peers_double.responses['d', 'check_permission'] = dict(subjectType='USER', subjectId='u-admin',
+        allowed=True, allowedScopes=[{'type': 'GLOBAL', 'id': None}], reason='bad subject')
+    call('get_report_locations', status=503)
+    del peers_double.responses['d', 'check_permission']
+    w = report(call)['workOrder']
+    peers_double.responses['d', 'query_people'] = dict(items=[dict(userId='u-student1', displayName='student1',
+        departmentId='dep-cs', accountStatus='ACTIVE', eligible=True, matchedPermissionCodes=[])], nextCursor=None)
+    call('get_dispatch_candidates', {'workOrderId': w['workOrderId']}, 'dispatcher', status=503)

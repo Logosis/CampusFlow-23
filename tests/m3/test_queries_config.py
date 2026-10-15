@@ -93,3 +93,22 @@ def test_management_uses_current_d_scope_after_space_department_changed(call, pe
     peers_double.spaces[1]['departmentId'] = 'dep-ee'
     assert call('get_work_orders', {'view': 'MANAGED'}, 'admin')['items'] == []
     call('get_work_order', {'workOrderId': w['workOrderId']}, 'admin', status=403)
+
+
+def test_overdue_statistics_include_expired_stage_before_polling(call, now, peers_double):
+    peers_double.grant('admin', 'm3.statistics.read')
+    peers_double.grant('student1', 'm3.work_order.cancel')
+    asyncio.run(seed_async())
+    start = now[0]
+    w = report(call)['workOrder']
+    now[0] += timedelta(hours=24, seconds=1)
+    mutate(call, 'cancel_work_order', w, 'student1')
+    # No timeout scan was run: elapsed stage time still counts, including a cancelled order.
+    body = dict(startTime=start.isoformat(), endTime=(now[0] + timedelta(seconds=1)).isoformat())
+    result = call('get_maintenance_stats', body, 'admin')
+    assert result['overdueCount'] == 1 and result['statusCounts']['CANCELLED'] == 1
+    w = report(call)['workOrder']
+    mutate(call, 'cancel_work_order', w, 'student1')
+    now[0] += timedelta(hours=25)
+    result = call('get_maintenance_stats', body, 'admin')
+    assert result['totalCount'] == 2 and result['overdueCount'] == 1  # early cancellation cannot age into overdue

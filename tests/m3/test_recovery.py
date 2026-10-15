@@ -151,6 +151,7 @@ def test_lost_response_and_expired_lease_recover_from_persisted_original_receipt
 def test_tick_failure_is_reported_and_subsequent_recovery_succeeds(call, peers_double, now):
     from backend.shared.errors import ApiError
     import pytest
+    asyncio.run(seed_async())
     peers_double.fail['d', 'audit'] = 'UNAVAILABLE'
     report(call)
     with pytest.raises(ApiError):
@@ -168,3 +169,12 @@ def test_success_without_matching_current_limit_is_unknown(call, peers_double):
     peers_double.responses['m1', 'change_room_limit'] = malformed
     result = mutate(call, 'start_repair', assigned(call), 'technician')
     assert result['seatSync']['status'] == 'UNKNOWN'
+
+
+def test_unconfigured_timeouts_fail_health_worker_until_seed(call):
+    import pytest
+    from backend.shared.errors import ApiError
+    with pytest.raises(ApiError, match='超时规则尚未初始化'):
+        asyncio.run(worker.tick())
+    asyncio.run(seed_async())
+    asyncio.run(worker.tick())

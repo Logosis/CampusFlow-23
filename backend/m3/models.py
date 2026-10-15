@@ -51,6 +51,7 @@ class StageCycle(Base):
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     entered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     escalation_id: Mapped[str | None] = mapped_column(String(64))
+    exited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class Outbox(Base):

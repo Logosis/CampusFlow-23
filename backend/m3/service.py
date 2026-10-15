@@ -95,6 +95,7 @@ async def dispatch(request, input):
     previous = db.existing_receipt(request, 'dispatch_order', input)
     if previous:
         return db.render_receipt(previous, user(request))
+    space = await peers.get_space(w.space_id, request)
     people = await peers.people(w.space_id, 'DISPATCH', ['m3.repair.manage'], request, [input.assigneeId])
     if not is_eligible(people[0]):
         raise ApiError('FORBIDDEN', '承接人不具备该教室维修资格')
@@ -102,6 +103,7 @@ async def dispatch(request, input):
     def perform(session):
         w = db.get_order(session, input.workOrderId, locked=True)
         db.expect(w, input.expectedVersion, ('WAITING_ASSIGNMENT',))
+        w.department_id = space['departmentId']
         w.assignee_id = input.assigneeId
         w.version += 1
         w.updated_at = utc_now()
@@ -169,10 +171,17 @@ async def mutate(request, input, function):
         if function in ('submit_evaluation', 'cancel_work_order') and w.reporter_id != actor:
             raise ApiError('FORBIDDEN', '只允许本单上报人操作')
     check_relation(snapshot)
+    previous = db.existing_receipt(request, function, input)
+    if previous:
+        return db.render_receipt(previous, actor)
+    space = await peers.get_space(snapshot.space_id, request) if function in (
+        'start_repair', 'submit_completion', 'submit_acceptance') else None
 
     def perform(session):
         w = db.get_order(session, input.workOrderId, locked=True)
         check_relation(w)
+        if space:
+            w.department_id = space['departmentId']
         now = utc_now()
         if function == 'submit_evaluation':
             if w.status != 'ACCEPTED':
@@ -328,11 +337,15 @@ async def stats(request, input):
     counts = {key: sum(w.status == key for w in rows) for key in db.STATUSES}
     samples = [(w.accepted_at - w.first_repair_started_at).total_seconds() for w in rows
         if w.status == 'ACCEPTED' and w.first_repair_started_at and w.accepted_at and w.accepted_at >= w.first_repair_started_at]
+    from backend.m3.models import StageCycle
+    checked_at = utc_now()
     with db.sessions()() as session:
-        overdue = set(session.scalars(select(Record.work_order_id).where(Record.kind == 'ESCALATE',
-            Record.work_order_id.in_([w.id for w in rows]))))
+        cycles = list(session.scalars(select(StageCycle).where(
+            StageCycle.work_order_id.in_([w.id for w in rows]), StageCycle.due_at.is_not(None))))
+        overdue = {cycle.work_order_id for cycle in cycles
+            if cycle.due_at <= (cycle.exited_at or checked_at)}
     return dict(startTime=format_time(start), endTime=format_time(end), spaceId=input.spaceId,
-        checkedAt=format_time(utc_now()), totalCount=len(rows), statusCounts=counts,
+        checkedAt=format_time(checked_at), totalCount=len(rows), statusCounts=counts,
         overdueCount=len(overdue), averageRepairSeconds=sum(samples) / len(samples) if samples else None,
         sampleCount=len(samples))
 
@@ -350,6 +363,12 @@ async def update_config(request, input):
     if previous:
         return db.render_receipt(previous)
     rules = [r.model_dump() for r in input.rules]
+    from datetime import timedelta
+    try:
+        for seconds in [input.checkIntervalSeconds, *(r['timeoutSeconds'] for r in rules)]:
+            utc_now() + timedelta(seconds=seconds)
+    except OverflowError:
+        raise ApiError('INVALID_ARGUMENT', '配置时限超出可表示时间范围') from None
     if len({r['ruleId'] for r in rules}) != len(rules):
         raise ApiError('INVALID_ARGUMENT', '规则编号不能重复')
     spaces = {}

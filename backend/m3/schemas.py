@@ -372,3 +372,11 @@ class StatsOutput(OutputModel):
 class Department(OutputModel):
     departmentId: Id
     name: str
+
+
+class PermissionResult(OutputModel):
+    subjectType: Literal['USER', 'SYSTEM']
+    subjectId: Id
+    allowed: bool
+    allowedScopes: list[Scope]
+    reason: str
