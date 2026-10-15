@@ -20,7 +20,7 @@ def test_report_unique_request_and_validation(call, db_factory, peers_double):
     call('report_fault', body | {'description': '  '}, status=422)
     call('report_fault', body | {'reporterId': 'u-admin'}, status=422)
     call('report_fault', body, token='technician', status=403)
-    call('report_fault', body | {'spaceId': 'missing'}, status=404)
+    call('report_fault', body | {'spaceId': 'missing', 'requestId': 'missing-space'}, status=404)
     peers_double.spaces[0]['registered'] = False
     call('report_fault', body | {'requestId': 'unregistered'}, status=422)
     with db_factory() as session:
@@ -77,3 +77,32 @@ def test_dependency_failures_are_not_empty_success(call, peers_double):
     call('report_fault', dict(spaceId='sp-school', faultLocation='a', description='b', requestId='x'), status=503)
     peers_double.fail['d', 'check_permission'] = 'TRANSPORT'
     call('get_dispatch_tasks', {}, 'dispatcher', status=503)
+
+
+def test_replays_check_current_permission_but_not_old_business_eligibility(call, peers_double):
+    body = dict(spaceId='sp-school', faultLocation='门口', description='故障', requestId='original')
+    result = call('report_fault', body)
+    peers_double.spaces[0]['registered'] = False
+    assert call('report_fault', body) == result
+    peers_double.grants['student1'] = []
+    call('report_fault', body, status=403)
+    peers_double.spaces[0]['registered'] = True
+    peers_double.grant('student1', 'm3.work_order.report')
+    w = report(call)['workOrder']
+    request = dict(workOrderId=w['workOrderId'], assigneeId='u-technician', expectedVersion=1, requestId='assign')
+    dispatched = call('dispatch_order', request, 'dispatcher')
+    peers_double.users['technician']['accountStatus'] = 'DISABLED'
+    assert call('dispatch_order', request, 'dispatcher') == dispatched
+    peers_double.grants['dispatcher'] = []
+    call('dispatch_order', request, 'dispatcher', status=403)
+
+
+@pytest.mark.parametrize('function,body,token', [
+    ('get_report_locations', {'cursor': None}, 'student1'),
+    ('get_dispatch_tasks', {'spaceId': None}, 'dispatcher'),
+    ('get_work_tasks', {'purpose': 'REPAIR', 'workOrderId': None}, 'technician'),
+    ('get_work_orders', {'view': 'OWN', 'status': None}, 'admin'),
+    ('get_maintenance_stats', {'startTime': '2026-10-14T00:00:00Z', 'endTime': '2026-10-15T00:00:00Z', 'spaceId': None}, 'admin'),
+])
+def test_optional_fields_omitted_not_null(call, function, body, token):
+    call(function, body, token, status=422)

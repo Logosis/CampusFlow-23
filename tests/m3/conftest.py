@@ -74,6 +74,8 @@ class PeerDouble:
                 return self.ok(dict(subjectType=mode, subjectId=self.users[token]['userId'] if token else 'm3',
                     allowed=bool(scopes), allowedScopes=scopes, reason='test'))
             if fn == 'query_master':
+                if body['operation'] == 'LIST_DEPARTMENTS':
+                    return self.ok({'items': FIXTURE['departments'], 'nextCursor': None})
                 if body['operation'] == 'GET_SPACE':
                     item = next((s for s in self.spaces if s['spaceId'] == body['spaceId']), None)
                     return self.ok(item) if item else self.error('NOT_FOUND')
@@ -94,11 +96,11 @@ class PeerDouble:
                     if body['mode'] == 'CANDIDATES' and not eligible:
                         continue
                     rows.append({k: u[k] for k in ('userId', 'displayName', 'departmentId', 'accountStatus')}
-                        | dict(eligible=eligible, matchedPermissionCodes=codes if eligible else []))
+                        | dict(eligible=None if body['purpose'] == 'DISPLAY' else eligible, matchedPermissionCodes=codes if eligible else []))
                 return self.ok({'people': rows} if body['mode'] == 'BY_IDS' else {'items': rows, 'nextCursor': None})
             if fn == 'send_notification':
                 rid = body['requestId']
-                self.notifications.setdefault(rid, body | dict(notificationId='n-' + rid, channel='EMAIL',
+                self.notifications.setdefault(rid, {k: v for k, v in body.items() if k != 'recipientUserIds'} | dict(notificationId='n-' + rid, channel='EMAIL',
                     createdAt=clock.format_time(clock.utc_now()), deliveries=[dict(recipientUserId=u,
                     status='SUBMITTED', attemptCount=1, lastAttemptAt=clock.format_time(clock.utc_now()), reason='')
                     for u in body['recipientUserIds']]))

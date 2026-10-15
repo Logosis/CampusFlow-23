@@ -28,7 +28,16 @@ class Scope(InputModel):
         return self
 
 
-class PageInput(InputModel):
+class OptionalInput(InputModel):
+    @model_validator(mode='before')
+    @classmethod
+    def no_explicit_null(cls, value):
+        if isinstance(value, dict) and any(item is None for item in value.values()):
+            raise ValueError('可省字段必须省略，不能填写null')
+        return value
+
+
+class PageInput(OptionalInput):
     limit: Annotated[int, Field(ge=1, le=100)] = 20
     cursor: Id | None = None
 
@@ -109,7 +118,7 @@ class OrdersInput(PageInput):
         return self
 
 
-class StatsInput(InputModel):
+class StatsInput(OptionalInput):
     startTime: IsoTime
     endTime: IsoTime
     spaceId: Id | None = None
@@ -358,3 +367,8 @@ class StatsOutput(OutputModel):
     overdueCount: int
     averageRepairSeconds: float | None
     sampleCount: int
+
+
+class Department(OutputModel):
+    departmentId: Id
+    name: str

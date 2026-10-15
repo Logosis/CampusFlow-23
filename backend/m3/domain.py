@@ -62,9 +62,13 @@ def enter_stage(session, order, stage, now):
     cycle = (session.scalar(select(func.max(StageCycle.cycle)).where(
         StageCycle.work_order_id == order.id, StageCycle.stage == stage)) or 0) + 1
     start = order.created_at if rule and rule['clockStart'] == 'CREATED_AT' else now
+    try:
+        due = start + timedelta(seconds=rule['timeoutSeconds']) if rule else None
+    except OverflowError:
+        raise ApiError('INVALID_ARGUMENT', '超时时限超出可表示时间范围') from None
     session.add(StageCycle(id=uid(), work_order_id=order.id, stage=stage, cycle=cycle,
         config_version=cfg['version'], rule=rule,
-        due_at=start + timedelta(seconds=rule['timeoutSeconds']) if rule else None,
+        due_at=due,
         entered_at=now, escalation_id=None))
     order.timeout_config_version = cfg['version'] if rule else None
 
@@ -152,6 +156,18 @@ def mutation_output(session, w, record_id, *, report=False):
 
 def receipt_owner(request):
     return request.state.source_module or request.state.identity['userId']
+
+
+def existing_receipt(request, function, input):
+    """Only call after current authorization, before re-checking old business eligibility."""
+    with sessions()() as session:
+        receipt = session.scalar(select(Receipt).where(Receipt.owner == receipt_owner(request),
+            Receipt.function == function, Receipt.request_id == input.requestId))
+        if receipt:
+            if receipt.fingerprint != digest(input.model_dump()):
+                raise ApiError('REQUEST_ID_REUSED', '原请求编号不能用于不同内容')
+            return receipt.id
+    return None
 
 
 def transact(request, function, input, perform):
