@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>CampusFlow · 自习座位</title>
+  <style>
+    :root { color-scheme: light; font-family: Inter, "Microsoft YaHei", sans-serif; color:#152238; background:#f3f6fb; }
+    body { margin:0; }
+    header { padding:28px max(5vw,24px); color:white; background:linear-gradient(120deg,#153e75,#0f766e); }
+    header h1 { margin:0 0 8px; font-size:clamp(24px,4vw,40px); }
+    header p { margin:0; opacity:.86; }
+    main { width:min(1100px,92vw); margin:24px auto 60px; display:grid; gap:20px; }
+    section { background:white; border:1px solid #dbe3ef; border-radius:16px; padding:20px; box-shadow:0 10px 28px #1e3a5f12; }
+    h2 { margin:0 0 16px; font-size:19px; }
+    form { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:12px; align-items:end; }
+    label { display:grid; gap:6px; font-size:13px; color:#52627a; }
+    input,select,button { font:inherit; border-radius:9px; padding:10px 12px; border:1px solid #cbd5e1; }
+    button { border:0; background:#0f766e; color:white; cursor:pointer; font-weight:650; }
+    button.secondary { background:#e8eef7; color:#23324a; }
+    button:disabled { opacity:.45; cursor:not-allowed; }
+    .toolbar { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+    .cards { display:grid; gap:10px; }
+    .card { border:1px solid #dbe3ef; border-radius:12px; padding:14px; display:flex; justify-content:space-between; gap:16px; align-items:center; }
+    .meta { display:grid; gap:5px; }
+    .muted { color:#6b7a90; font-size:13px; }
+    .status { font-size:12px; background:#eef6ff; color:#24558a; border-radius:999px; padding:4px 9px; }
+    #notice { position:sticky; top:10px; z-index:2; min-height:20px; padding:10px 14px; border-radius:10px; background:#e8f5f2; color:#075e54; display:none; }
+    #notice.error { display:block; background:#fff0f0; color:#9b1c1c; }
+    @media (max-width:620px) { .card { align-items:flex-start; flex-direction:column; } }
+  </style>
+</head>
+<body>
+<header>
+  <h1>自习座位预约</h1>
+  <p>查询开放座位、预约、签到，并查看你的完整预约记录。</p>
+</header>
+<main>
+  <div id="notice" role="status"></div>
+  <section>
+    <h2>查找座位</h2>
+    <form id="search-form">
+      <label>教室编号（可省）<input name="spaceId" placeholder="例如 sp-school"></label>
+      <label>插座类型<select name="socketTag"><option value="">不限</option><option>FIXED</option><option>RAIL</option></select></label>
+      <label>开始时间<input name="startTime" type="datetime-local"></label>
+      <label>结束时间<input name="endTime" type="datetime-local"></label>
+      <button>搜索</button>
+    </form>
+    <div id="search-results" class="cards" style="margin-top:16px"></div>
+  </section>
+  <section>
+    <h2>签到</h2>
+    <form id="checkin-form">
+      <label>预约编号<input name="reservationId" required></label>
+      <label>屏幕动态码<input name="token" required></label>
+      <label>当前版本<input name="expectedVersion" type="number" min="1" required></label>
+      <button>确认签到</button>
+    </form>
+  </section>
+  <section>
+    <div class="toolbar"><h2 style="margin-right:auto">我的预约</h2><button id="refresh" class="secondary">刷新</button></div>
+    <div id="history" class="cards"></div>
+  </section>
+</main>
+<script type="module">
+  import { api, getCredential } from "../shared/auth.js";
+  if (!getCredential()) location.replace("/login.html");
+  const notice = document.querySelector("#notice");
+  const show = (message, error=false) => { notice.textContent=message; notice.className=error?"error":""; notice.style.display="block"; };
+  const iso = value => value ? new Date(value).toISOString() : undefined;
+  const requestId = () => crypto.randomUUID();
+  const run = async action => { try { return await action(); } catch (error) { show(`${error.code || "UNAVAILABLE"}: ${error.message}`, true); throw error; } };
+  function reservationCard(item) {
+    const card=document.createElement("div"); card.className="card";
+    const meta=document.createElement("div"); meta.className="meta";
+    const title=document.createElement("strong"); title.textContent=`${item.seatId} · ${item.status}`;
+    const time=document.createElement("span"); time.className="muted"; time.textContent=`${new Date(item.startTime).toLocaleString()} — ${new Date(item.endTime).toLocaleString()}`;
+    const id=document.createElement("span"); id.className="muted"; id.textContent=`${item.reservationId} · v${item.version}`;
+    meta.append(title,time,id); card.append(meta); return card;
+  }
+  async function loadHistory() {
+    const data=await run(()=>api("m1","get_my_reservations",{limit:100}));
+    const host=document.querySelector("#history"); host.replaceChildren(...data.items.map(reservationCard));
+    if (!data.items.length) host.textContent="暂无预约记录";
+  }
+  document.querySelector("#search-form").addEventListener("submit", async event => {
+    event.preventDefault(); const raw=Object.fromEntries(new FormData(event.currentTarget));
+    const input={limit:100}; for (const key of ["spaceId","socketTag"]) if(raw[key]) input[key]=raw[key];
+    if(raw.startTime || raw.endTime){ input.startTime=iso(raw.startTime); input.endTime=iso(raw.endTime); }
+    const data=await run(()=>api("m1","search_seats",input)); const host=document.querySelector("#search-results"); host.replaceChildren();
+    for(const item of data.items){ const card=document.createElement("div"); card.className="card"; const meta=document.createElement("div"); meta.className="meta";
+      const title=document.createElement("strong"); title.textContent=`${item.space.name} · ${item.seat.seatCode}`;
+      const detail=document.createElement("span"); detail.className="muted"; detail.textContent=`${item.space.location} · ${item.seat.socketTags.join(" / ") || "无插座标记"} · ${item.reason}`;
+      const button=document.createElement("button"); button.textContent="预约"; button.disabled=item.available!==true;
+      button.addEventListener("click",async()=>{ const body={seatId:item.seat.seatId,startTime:input.startTime,endTime:input.endTime,requestId:requestId()};
+        try { const result=await run(()=>api("m1","reserve_seat",body)); show(`预约成功：${result.reservationId}`); await loadHistory(); }
+        catch(error){ if(error.code==="UNAVAILABLE") localStorage.setItem("campusflow.m1.pendingReservation",JSON.stringify(body)); }
+      }); meta.append(title,detail); card.append(meta,button); host.append(card); }
+    if(!data.items.length) host.textContent="没有符合条件的座位";
+  });
+  document.querySelector("#checkin-form").addEventListener("submit",async event=>{ event.preventDefault(); const raw=Object.fromEntries(new FormData(event.currentTarget));
+    const body={reservationId:raw.reservationId,token:raw.token,expectedVersion:Number(raw.expectedVersion),requestId:requestId()};
+    const result=await run(()=>api("m1","check_in",body)); show(`签到成功：${result.reservationId}`); await loadHistory();
+  });
+  document.querySelector("#refresh").addEventListener("click",loadHistory);
+  loadHistory();
+</script>
+</body>
+</html>
