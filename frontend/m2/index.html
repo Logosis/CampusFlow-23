@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>整教室预约与审批 · CampusFlow</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --panel: #fff; --line: #e2e5ea; --text: #1f2329;
+    --muted: #6b7280; --brand: #2f5fd0; --brand-dark: #24499f;
+    --ok: #1f8a4c; --warn: #b26b00; --bad: #c0392b;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 15px/1.6 -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
+  header { background: var(--panel); border-bottom: 1px solid var(--line);
+           padding: 14px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  header h1 { font-size: 17px; margin: 0; font-weight: 600; }
+  header .who { margin-left: auto; color: var(--muted); font-size: 13px; }
+  header a { color: var(--brand); text-decoration: none; font-size: 13px; }
+  main { max-width: 1080px; margin: 20px auto; padding: 0 16px 48px; }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+            padding: 18px; margin-bottom: 18px; }
+  section h2 { font-size: 15px; margin: 0 0 12px; font-weight: 600; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+  input, select, textarea { font: inherit; padding: 7px 9px; border: 1px solid var(--line);
+            border-radius: 6px; background: #fff; color: var(--text); min-width: 150px; }
+  textarea { min-width: 320px; min-height: 62px; }
+  button { font: inherit; padding: 7px 14px; border-radius: 6px; border: 1px solid var(--brand);
+           background: var(--brand); color: #fff; cursor: pointer; }
+  button:hover { background: var(--brand-dark); }
+  button.ghost { background: #fff; color: var(--brand); }
+  button.danger { background: #fff; color: var(--bad); border-color: var(--bad); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line);
+           vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; font-size: 13px; }
+  tr.sel { background: #f0f4ff; }
+  .tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 12px;
+         border: 1px solid currentColor; }
+  .PENDING { color: var(--warn); } .APPROVED { color: var(--ok); }
+  .REJECTED { color: var(--bad); } .CANCELLED { color: var(--muted); }
+  .TIMEOUT_CANCELLED { color: var(--bad); }
+  .SUCCESS { color: var(--ok); } .UNKNOWN { color: var(--warn); } .REJECTED-sync { color: var(--bad); }
+  .muted { color: var(--muted); font-size: 13px; }
+  .msg { border-radius: 6px; padding: 9px 12px; margin: 10px 0; font-size: 13px; display: none; }
+  .msg.show { display: block; }
+  .msg.err { background: #fdecea; color: var(--bad); border: 1px solid #f5c6c2; }
+  .msg.ok { background: #eaf7ef; color: var(--ok); border: 1px solid #bfe3cd; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 860px) { .grid2 { grid-template-columns: 1fr; } }
+  .kv { display: grid; grid-template-columns: 118px 1fr; gap: 4px 10px; font-size: 14px; }
+  .kv dt { color: var(--muted); }
+  .kv dd { margin: 0; word-break: break-all; }
+  .empty { color: var(--muted); font-size: 14px; padding: 8px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>整教室预约与审批</h1>
+  <a href="/">返回首页</a>
+  <span class="who" id="who">未登录</span>
+  <button class="ghost" id="logout" type="button">退出</button>
+</header>
+
+<main>
+  <div class="msg" id="msg"></div>
+
+  <section>
+    <h2>我的可操作项</h2>
+    <div class="muted" id="actions">加载中…</div>
+  </section>
+
+  <section>
+    <h2>提交整教室预约申请</h2>
+    <div class="row">
+      <label>教室
+        <select id="space"></select>
+      </label>
+      <label>开始时间
+        <input type="datetime-local" id="start">
+      </label>
+      <label>结束时间
+        <input type="datetime-local" id="end">
+      </label>
+      <label>用途
+        <input id="purpose" maxlength="2000" placeholder="例如：学生会活动">
+      </label>
+      <button id="submit" type="button">提交申请</button>
+      <button class="ghost" id="check" type="button">查询该时段可用性</button>
+    </div>
+    <div class="muted" id="availability"></div>
+  </section>
+
+  <section>
+    <h2>我的申请</h2>
+    <div class="row">
+      <label>查看
+        <select id="view">
+          <option value="OWN">我提交的</option>
+          <option value="HANDLED">我处理过的</option>
+          <option value="MANAGED">全部（需管理权限）</option>
+        </select>
+      </label>
+      <label>状态
+        <select id="status">
+          <option value="">全部</option>
+          <option>PENDING</option>
+          <option>APPROVED</option>
+          <option>REJECTED</option>
+          <option>TIMEOUT_CANCELLED</option>
+          <option>CANCELLED</option>
+        </select>
+      </label>
+      <button id="refresh" type="button">刷新列表</button>
+    </div>
+    <div id="list"><div class="empty">暂无数据</div></div>
+  </section>
+
+  <section id="detail-box" hidden>
+    <h2>申请详情</h2>
+    <div class="grid2">
+      <div>
+        <dl class="kv" id="detail"></dl>
+        <div class="muted" id="sync"></div>
+        <h3 style="font-size:14px;margin:14px 0 6px">审批记录</h3>
+        <div id="approvals" class="muted">尚未审批</div>
+      </div>
+      <div>
+        <h3 style="font-size:14px;margin:0 0 6px">操作</h3>
+        <div class="row" id="actions-box"></div>
+        <h3 style="font-size:14px;margin:14px 0 6px">通知与维护提示</h3>
+        <div id="notes" class="muted"></div>
+      </div>
+    </div>
+  </section>
+  <section id="config-box" hidden>
+    <h2>审批配置（M2-S08）</h2>
+    <div class="muted" id="config">加载中…</div>
+    <div class="row" style="margin-top:10px">
+      <button class="ghost" id="load-config" type="button">读取当前配置</button>
+    </div>
+  </section>
+</main>
+
+<script type="module">
+import { getCredential, clearSession, api } from "../shared/auth.js";
+
+const $ = (id) => document.getElementById(id);
+const state = { actions: [], selected: null, detail: null };
+
+function show(message, kind = "err") {
+  const box = $("msg");
+  box.textContent = message;
+  box.className = "msg show " + kind;
+  if (kind === "ok") setTimeout(() => { box.className = "msg"; }, 4000);
+}
+
+function clearMessage() { $("msg").className = "msg"; }
+
+function toIso(local) {
+  if (!local) return null;
+  const value = new Date(local);
+  if (Number.isNaN(value.getTime())) return null;
+  return value.toISOString();
+}
+
+function toLocal(iso) {
+  if (!iso) return "";
+  const value = new Date(iso);
+  if (Number.isNaN(value.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`
+       + `T${pad(value.getHours())}:${pad(value.getMinutes())}`;
+}
+
+function shortTime(iso) { return iso ? iso.replace("T", " ").replace("Z", " UTC") : "—"; }
+
+function allowed(operation) {
+  return state.actions.some((item) => item.operation === operation && item.allowed);
+}
+
+// ------------------------------------------------------------------ 身份
+async function loadIdentity() {
+  try {
+    const identity = await api("d", "get_identity", {});
+    $("who").textContent = `${identity.displayName}${identity.departmentId ? " · " + identity.departmentId : ""}`;
+    return identity;
+  } catch (error) {
+    if (error.httpStatus === 401) { location.href = "/login.html"; return null; }
+    show(`身份读取失败：${error.message}`);
+    return null;
+  }
+}
+
+async function loadActions() {
+  try {
+    const data = await api("m2", "get_allowed_actions", {});
+    state.actions = data.actions || [];
+    $("actions").innerHTML = state.actions
+      .map((item) => `<span class="tag ${item.allowed ? "APPROVED" : "CANCELLED"}">`
+        + `${item.operation}：${item.allowed ? "可用" : item.reason || "不可用"}</span>`)
+      .join(" ");
+  } catch (error) {
+    show(`可操作项读取失败：${error.message}`);
+  }
+}
+
+// ------------------------------------------------------------------ 教室与时段
+async function loadSpaces() {
+  try {
+    const data = await api("m2", "get_classroom_options", { limit: 100 });
+    const select = $("space");
+    select.innerHTML = "";
+    for (const item of data.items) {
+      const option = document.createElement("option");
+      option.value = item.space.spaceId;
+      option.textContent = `${item.space.name}（${item.space.location}）`;
+      select.appendChild(option);
+    }
+    if (!data.items.length) {
+      const option = document.createElement("option");
+      option.textContent = "没有可用教室";
+      option.value = "";
+      select.appendChild(option);
+    }
+  } catch (error) {
+    show(`教室列表读取失败：${error.message}`);
+  }
+}
+
+async function checkAvailability() {
+  clearMessage();
+  const spaceId = $("space").value;
+  const startTime = toIso($("start"));
+  const endTime = toIso($("end"));
+  if (!spaceId || !startTime || !endTime) { show("请选择教室并填写开始、结束时间"); return; }
+  try {
+    const data = await api("m2", "get_classroom_options", { startTime, endTime, limit: 100 });
+    const item = data.items.find((entry) => entry.space.spaceId === spaceId);
+    const availability = item && item.availability;
+    if (!availability) { $("availability").textContent = "该教室没有返回可用性结果。"; return; }
+    $("availability").textContent = availability.canOccupy
+      ? "该时段可整体占用（提交时仍会重新校验）。"
+      : `该时段不可占用：${availability.blockedBy.join("、")} ${availability.reasons.join("；")}`;
+  } catch (error) {
+    show(`可用性查询失败：${error.message}`);
+  }
+}
+
+async function submitApplication() {
+  clearMessage();
+  const spaceId = $("space").value;
+  const startTime = toIso($("start"));
+  const endTime = toIso($("end"));
+  const purpose = $("purpose").value.trim();
+  if (!spaceId) { show("请选择教室"); return; }
+  if (!startTime || !endTime) { show("请填写开始与结束时间"); return; }
+  if (!purpose) { show("用途不能为空"); return; }
+  const button = $("submit");
+  button.disabled = true;
+  try {
+    const data = await api("m2", "submit_application",
+      { spaceId, startTime, endTime, purpose, requestId: crypto.randomUUID() });
+    show(`已提交，申请编号 ${data.application.applicationId}，当前状态 ${data.application.status}`, "ok");
+    state.selected = data.application.applicationId;
+    await Promise.all([loadList(), loadDetail()]);
+  } catch (error) {
+    show(`提交失败：${error.message}（${error.code}）`);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+// ------------------------------------------------------------------ 列表与详情
+async function loadList() {
+  clearMessage();
+  const view = $("view").value;
+  const status = $("status").value;
+  const body = { view, limit: 50 };
+  if (status) body.status = status;
+  try {
+    const data = await api("m2", "get_applications", body);
+    const rows = data.items || [];
+    if (!rows.length) { $("list").innerHTML = '<div class="empty">暂无数据</div>'; return; }
+    $("list").innerHTML = `<table><thead><tr>
+        <th>申请编号</th><th>教室</th><th>时段</th><th>用途</th><th>状态</th><th>当前级</th>
+      </tr></thead><tbody>${rows.map((item) => {
+        const a = item.application;
+        const selected = state.selected === a.applicationId ? " class=\"sel\"" : "";
+        return `<tr${selected} data-id="${a.applicationId}" style="cursor:pointer">
+          <td><code>${a.applicationId.slice(0, 8)}</code></td>
+          <td>${a.spaceId}</td>
+          <td>${shortTime(a.startTime)}<br><span class="muted">→ ${shortTime(a.endTime)}</span></td>
+          <td>${escapeHtml(a.purpose)}</td>
+          <td><span class="tag ${a.status}">${a.status}</span></td>
+          <td>${a.currentLevel ?? "—"}</td>
+        </tr>`;
+      }).join("")}</tbody></table>`;
+    $("list").querySelectorAll("tr[data-id]").forEach((row) => {
+      row.addEventListener("click", () => { state.selected = row.dataset.id; loadList(); loadDetail(); });
+    });
+  } catch (error) {
+    show(`列表读取失败：${error.message}`);
+  }
+}
+
+async function loadDetail() {
+  if (!state.selected) { $("detail-box").hidden = true; return; }
+  try {
+    const data = await api("m2", "get_application", { applicationId: state.selected });
+    state.detail = data;
+    renderDetail(data);
+    $("detail-box").hidden = false;
+  } catch (error) {
+    show(`详情读取失败：${error.message}`);
+  }
+}
+
+function renderDetail(data) {
+  const a = data.application;
+  $("detail").innerHTML = `
+    <dt>申请编号</dt><dd><code>${a.applicationId}</code></dd>
+    <dt>申请人</dt><dd>${a.applicantId}</dd>
+    <dt>教室</dt><dd>${a.spaceId}</dd>
+    <dt>时段</dt><dd>${shortTime(a.startTime)} → ${shortTime(a.endTime)}</dd>
+    <dt>用途</dt><dd>${escapeHtml(a.purpose)}</dd>
+    <dt>状态</dt><dd><span class="tag ${a.status}">${a.status}</span></dd>
+    <dt>当前审批级</dt><dd>${a.currentLevel ?? "—"}</dd>
+    <dt>版本</dt><dd>${a.version}</dd>
+    <dt>提交时间</dt><dd>${shortTime(a.submittedAt)}</dd>
+    <dt>当前级开始</dt><dd>${shortTime(a.currentLevelStartedAt)}</dd>
+    <dt>超时时间</dt><dd>${shortTime(a.expiresAt)}</dd>
+    <dt>终结时间</dt><dd>${shortTime(a.terminatedAt)}</dd>
+    <dt>终结原因</dt><dd>${escapeHtml(a.terminationReason || "—")}</dd>`;
+
+  const sync = data.seatSync;
+  $("sync").textContent = sync
+    ? `整室占用写回：${sync.status}${sync.message ? "（" + sync.message + "）" : ""}`
+      + ` 来源版本 ${sync.sourceVersion}`
+    : "尚未发出整室占用写回。";
+
+  $("approvals").innerHTML = data.approvals.length
+    ? `<table><thead><tr><th>级别</th><th>审批人</th><th>决定</th><th>意见</th><th>时间</th></tr></thead>
+       <tbody>${data.approvals.map((item) => `<tr>
+         <td>${item.level}</td><td>${item.approverId}</td>
+         <td><span class="tag ${item.decision === "APPROVE" ? "APPROVED" : "REJECTED"}">${item.decision}</span></td>
+         <td>${escapeHtml(item.comment || "—")}</td><td>${shortTime(item.decidedAt)}</td>
+       </tr>`).join("")}</tbody></table>`
+    : "尚未审批";
+
+  renderActions(a);
+  loadImpact(a.applicationId);
+
+  $("notes").innerHTML = data.notifications.length
+    ? data.notifications.map((item) => `<div>${item.kind || ""} 通知：<span class="tag ${item.status}">`
+        + `${item.status}</span>${item.message ? " " + escapeHtml(item.message) : ""}</div>`).join("")
+    : "暂无通知记录";
+}
+
+function renderActions(application) {
+  const box = $("actions-box");
+  box.innerHTML = "";
+  if (application.status === "PENDING" && allowed("APPROVE")) {
+    const comment = document.createElement("input");
+    comment.placeholder = "审批意见（可空）";
+    comment.id = "comment";
+    const approve = document.createElement("button");
+    approve.textContent = "通过本级";
+    approve.addEventListener("click", () => submitApproval(application, "APPROVE"));
+    const reject = document.createElement("button");
+    reject.className = "danger";
+    reject.textContent = "驳回";
+    reject.addEventListener("click", () => submitApproval(application, "REJECT"));
+    box.append(comment, approve, reject);
+  }
+  if (application.status === "PENDING" && allowed("CANCEL")) {
+    const reason = document.createElement("input");
+    reason.placeholder = "撤销原因（可空）";
+    reason.id = "cancel-reason";
+    const cancel = document.createElement("button");
+    cancel.className = "danger";
+    cancel.textContent = "撤销申请";
+    cancel.addEventListener("click", () => cancelApplication(application));
+    box.append(reason, cancel);
+  }
+  if (!box.children.length) {
+    box.innerHTML = '<span class="muted">当前状态下没有可用操作。</span>';
+  }
+}
+
+async function submitApproval(application, decision) {
+  clearMessage();
+  const comment = $("comment")?.value.trim();
+  const body = {
+    applicationId: application.applicationId,
+    level: application.currentLevel,
+    decision,
+    expectedVersion: application.version,
+    requestId: crypto.randomUUID(),
+  };
+  if (comment) body.comment = comment;
+  try {
+    const data = await api("m2", "submit_approval", body);
+    const sync = data.seatSync;
+    show(`审批已提交，申请状态 ${data.application.status}`
+      + (sync ? `，整室写回 ${sync.status}` : ""), "ok");
+    await Promise.all([loadList(), loadDetail()]);
+  } catch (error) {
+    show(`审批失败：${error.message}（${error.code}）`);
+  }
+}
+
+async function cancelApplication(application) {
+  clearMessage();
+  const reason = $("cancel-reason")?.value.trim();
+  const body = {
+    applicationId: application.applicationId,
+    expectedVersion: application.version,
+    requestId: crypto.randomUUID(),
+  };
+  if (reason) body.reason = reason;
+  try {
+    const data = await api("m2", "cancel_application", body);
+    show(`已撤销，状态 ${data.application.status}`, "ok");
+    await Promise.all([loadList(), loadDetail()]);
+  } catch (error) {
+    show(`撤销失败：${error.message}（${error.code}）`);
+  }
+}
+
+async function loadImpact(applicationId) {
+  try {
+    const data = await api("m2", "get_maintenance_impact", { applicationId });
+    const note = document.createElement("div");
+    note.className = "muted";
+    note.textContent = data.affectedByMaintenance
+      ? `维修影响：该教室时段存在维修下架（${data.availability.blockedBy.join("、")}）。`
+      : "维修影响：未发现维修下架。";
+    $("notes").prepend(note);
+  } catch (error) {
+    const note = document.createElement("div");
+    note.className = "muted";
+    note.textContent = `维修影响查询失败：${error.message}`;
+    $("notes").prepend(note);
+  }
+}
+
+function escapeHtml(value) {
+  return String(value ?? "").replace(/[&<>"']/g, (ch) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]
+  ));
+}
+
+// ------------------------------------------------------------------ 审批配置（F07）
+// 共同规则目前只允许 M1 管理入口的 USER 调用 M2-S08；本页如实显示被拒绝的原因，
+// 不伪造配置数据。若组内决定开放 M2 管理页直连，需要同步修改 backend/shared/access.py。
+async function loadConfig() {
+  clearMessage();
+  const box = $("config");
+  box.textContent = "读取中…";
+  try {
+    const data = await api("m2", "get_approval_config", {});
+    box.innerHTML = `
+      <dl class="kv">
+        <dt>配置版本</dt><dd>${data.version}</dd>
+        <dt>申请范围</dt><dd>${(data.applicationScopes || [])
+          .map((s) => `${s.type}${s.id ? "：" + s.id : ""}`).join("、") || "未配置"}</dd>
+        <dt>审批级数</dt><dd>${(data.approvalLevels || []).length} 级</dd>
+        <dt>各级审批人</dt><dd>${(data.approvalLevels || [])
+          .map((lv) => `第${lv.level}级 ${lv.approverId}`).join("；") || "未配置"}</dd>
+        <dt>计时起点</dt><dd>${data.clockStart ?? "未配置"}</dd>
+        <dt>超时秒数</dt><dd>${data.timeoutSeconds ?? "未配置"}</dd>
+        <dt>检查周期</dt><dd>${data.checkIntervalSeconds ?? "未配置"} 秒</dd>
+      </dl>`;
+  } catch (error) {
+    box.textContent = error.httpStatus === 403
+      ? "当前规则下该配置只能由 M1 管理入口读取（M2-S08 未对 M2 前端直连开放），因此这里显示为不可用。"
+      : `配置读取失败：${error.message}`;
+  }
+}
+
+// ------------------------------------------------------------------ 启动
+async function boot() {
+  if (!getCredential()) { location.href = "/login.html"; return; }
+  const identity = await loadIdentity();
+  if (!identity) return;
+  await Promise.all([loadActions(), loadSpaces()]);
+  await loadList();
+  $("submit").addEventListener("click", submitApplication);
+  $("check").addEventListener("click", checkAvailability);
+  $("refresh").addEventListener("click", loadList);
+  $("load-config").addEventListener("click", loadConfig);
+  if (allowed("CONFIGURE")) $("config-box").hidden = false;
+  $("view").addEventListener("change", () => { state.selected = null; loadList(); });
+  $("status").addEventListener("change", loadList);
+  $("logout").addEventListener("click", async () => {
+    try { await api("d", "logout", { requestId: crypto.randomUUID() }); } catch (_) { /* 忽略 */ }
+    clearSession();
+    location.href = "/login.html";
+  });
+}
+
+boot();
+</script>
+</body>
+</html>
