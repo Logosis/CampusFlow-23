@@ -161,6 +161,85 @@ def test_tick_failure_is_reported_and_subsequent_recovery_succeeds(call, peers_d
     asyncio.run(worker.tick())
 
 
+def test_health_keeps_failure_until_real_compensation_recovers(call, peers_double, now):
+    from queue import Queue
+    from fastapi.testclient import TestClient
+    from backend.shared.factory import create_app
+    from backend.m3.api import router
+
+    asyncio.run(seed_async())
+    peers_double.fail['d', 'audit'] = 'UNAVAILABLE'
+    report(call)
+    cycles = Queue()
+
+    async def tick():
+        try:
+            await worker.tick()
+        finally:
+            cycles.put(True)
+
+    with TestClient(create_app('m3', router, tick=tick)) as client:
+        cycles.get(timeout=5)
+        assert client.get('/health').json()['data']['workerError'] is True
+        attempts = len(peers_double.calls)
+        for _ in range(4):
+            now[0] += timedelta(seconds=1)
+            cycles.get(timeout=5)
+            assert client.get('/health').json()['data']['workerError'] is True
+        assert len(peers_double.calls) == attempts  # preserve the five-second retry interval
+        del peers_double.fail['d', 'audit']
+        now[0] += timedelta(seconds=1)
+        cycles.get(timeout=5)
+        assert client.get('/health').json()['data']['workerError'] is False
+        now[0] += timedelta(seconds=1)
+        cycles.get(timeout=5)
+        assert client.get('/health').json()['data']['workerError'] is False
+
+
+def test_worker_reload_preserves_failure_and_active_lease_is_not_recovery(call, peers_double, now, db_factory):
+    import importlib
+    import pytest
+    from backend.shared.errors import ApiError
+
+    asyncio.run(seed_async())
+    peers_double.fail['d', 'audit'] = 'UNAVAILABLE'
+    report(call)
+    with pytest.raises(ApiError):
+        asyncio.run(worker.tick())
+    # Recreate module-level state; only the database survives this worker reload.
+    importlib.reload(worker)
+    now[0] += timedelta(seconds=1)
+    with pytest.raises(ApiError):
+        asyncio.run(worker.tick())
+    del peers_double.fail['d', 'audit']
+    with db_factory() as session, session.begin():
+        job = session.scalar(select(Outbox).where(Outbox.kind == 'AUDIT'))
+        job.lease_until = now[0] + timedelta(seconds=30)
+    now[0] += timedelta(seconds=4)
+    with pytest.raises(ApiError):
+        asyncio.run(worker.tick())  # skipping an in-flight job must not mean recovered
+    now[0] += timedelta(seconds=30)
+    asyncio.run(worker.tick())
+    assert not worker._compensation_failed()
+
+
+def test_interrupted_cycle_stays_failed_and_older_cycle_cannot_clear_newer_failure(call, now):
+    import pytest
+    from backend.shared.errors import ApiError
+
+    asyncio.run(seed_async())
+    old_cycle = worker._begin_compensation()  # process exits before it records completion
+    now[0] += timedelta(seconds=1)
+    with pytest.raises(ApiError):
+        asyncio.run(worker.tick())
+    now[0] += timedelta(seconds=4)
+    new_cycle = worker._begin_compensation()
+    worker._finish_compensation(old_cycle, False)
+    assert worker._compensation_failed()
+    worker._finish_compensation(new_cycle, False)
+    assert not worker._compensation_failed()
+
+
 def test_success_without_matching_current_limit_is_unknown(call, peers_double):
     def malformed(body):
         return dict(source='M3', businessId=body['businessId'], spaceId=body['spaceId'],

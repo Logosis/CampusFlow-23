@@ -1,6 +1,6 @@
 """M3-owned durable business state; external IDs never reference another database."""
 from datetime import datetime
-from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, false
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -94,3 +94,4 @@ class WorkerState(Base):
     __tablename__ = "m3_worker_state"
     name: Mapped[str] = mapped_column(String(32), primary_key=True)
     last_run: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    failed: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())

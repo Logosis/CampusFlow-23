@@ -26,7 +26,7 @@ def test_empty_schema_upgrade_matches_models_downgrade_and_reupgrade(monkeypatch
     try:
         command.upgrade(cfg, 'head')
         with isolated.connect() as connection:
-            assert connection.scalar(text('select version_num from alembic_version')) == 'm3_0003'
+            assert connection.scalar(text('select version_num from alembic_version')) == 'm3_0004'
             diffs = compare_metadata(MigrationContext.configure(connection), Base.metadata)
             assert diffs == []
         command.upgrade(cfg, 'head')
@@ -61,6 +61,8 @@ def test_stage_exit_upgrade_backfills_equal_timestamp_history(monkeypatch):
         metadata.reflect(isolated)
         now = datetime(2026, 10, 15, tzinfo=timezone.utc)
         with isolated.begin() as connection:
+            connection.execute(metadata.tables['m3_worker_state'].insert().values(
+                name='compensation', last_run=now))
             connection.execute(metadata.tables['m3_work_orders'].insert().values(id='work', reporter_id='u-student1',
                 space_id='sp-school', department_id=None, fault_location='门口', description='旧数据',
                 status='WAITING_ACCEPTANCE', version=4, assignee_id='u-technician', created_at=now,
@@ -79,6 +81,7 @@ def test_stage_exit_upgrade_backfills_equal_timestamp_history(monkeypatch):
             rows = connection.execute(text('select id, exited_at from m3_stage_cycles order by id')).all()
             assert all(row.exited_at == now for row in rows[:3])
             assert rows[3].exited_at is None
+            assert connection.scalar(text("select failed from m3_worker_state where name='compensation'")) is True
     finally:
         isolated.dispose()
         with engine.begin() as connection:

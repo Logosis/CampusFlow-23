@@ -173,6 +173,13 @@ async def process_jobs(work_id=None):
         claim = _claim(ident)
         if claim:
             failed = await _process(claim) or failed
+        else:
+            # A leased job may still be running in another process, or awaiting recovery
+            # after a crash. Skipping it is not confirmation of a successful cycle.
+            with db.sessions()() as session:
+                job = session.get(Outbox, ident)
+                if job and job.lease_until and job.status not in ('SUCCESS', 'REJECTED'):
+                    failed = True
     return failed
 
 
@@ -209,7 +216,7 @@ def _scan_due():
     return True
 
 
-def _compensation_due():
+def _begin_compensation():
     now = db.utc_now()
     with db.sessions()() as session, session.begin():
         db.lock_key(session, 'm3:compensation')
@@ -218,15 +225,34 @@ def _compensation_due():
             state = WorkerState(name='compensation', last_run=None)
             session.add(state)
         if state.last_run and now < state.last_run + timedelta(seconds=5):
-            return False
+            return None
         state.last_run = now
-        return True
+        # Commit before network IO: interruptions must not erase the unresolved outcome.
+        state.failed = True
+        return now
+
+
+def _finish_compensation(started_at, failed):
+    with db.sessions()() as session, session.begin():
+        db.lock_key(session, 'm3:compensation')
+        state = session.get(WorkerState, 'compensation')
+        # A slow, older cycle cannot overwrite the outcome of a newer one.
+        if state.last_run == started_at:
+            state.failed = failed
+
+
+def _compensation_failed():
+    with db.sessions()() as session:
+        state = session.get(WorkerState, 'compensation')
+        return state is not None and state.failed
 
 
 async def tick():
     configured = _scan_due()
-    failed = _compensation_due() and await process_jobs()
+    started_at = _begin_compensation()
+    if started_at is not None:
+        _finish_compensation(started_at, await process_jobs())
     if not configured:
         raise ApiError('UNAVAILABLE', 'M3超时规则尚未初始化')
-    if failed:
+    if _compensation_failed():
         raise ApiError('UNAVAILABLE', 'M3存在未确认的同步、通知或审计，请查看模块日志与原请求记录')
