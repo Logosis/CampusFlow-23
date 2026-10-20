@@ -1,86 +1,16 @@
-"""D 身份初始化测试：在事务内创建独立 schema，结束后整体回滚。"""
+"""D 身份初始化测试；数据库隔离准备由 conftest.py 提供。"""
 
 import json
-from uuid import uuid4
 
 import pytest
-from alembic.migration import MigrationContext
-from alembic.operations import Operations
-from alembic.script import ScriptDirectory
 from argon2 import PasswordHasher
 from sqlalchemy import delete, func, select
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.exc import IntegrityError
 
 import backend.d.seed as seed_module
 from backend.d.models import (
     Base, Department, LoginSession, Permission, Role, RoleGrant, User, UserRole,
 )
-from backend.shared.db import session_factory as shared_session_factory
-from backend.shared.settings import ROOT, Settings
-
-
-@pytest.fixture
-def fixture_data():
-    path = ROOT / "tests" / "fixtures" / "bootstrap.json"
-    return json.loads(path.read_text(encoding="utf-8"))
-
-
-@pytest.fixture
-def isolated_db(monkeypatch):
-    """所有测试写入独立 schema；seed 的提交只提交内部保存点。"""
-    if Settings.load("d").app_env != "test":
-        pytest.fail("这些测试要求已有配置 APP_ENV=test。", pytrace=False)
-
-    with shared_session_factory("d")() as session:
-        engine = session.get_bind()
-    if engine.dialect.name != "postgresql":
-        pytest.fail("这些测试要求连接 PostgreSQL。", pytrace=False)
-
-    connection_error_type = None
-    try:
-        connection = engine.connect()
-    except SQLAlchemyError as exc:
-        connection_error_type = type(exc).__name__
-    if connection_error_type is not None:
-        pytest.fail(
-            f"D test database connection failed ({connection_error_type}); "
-            "check PostgreSQL and local configuration.",
-            pytrace=False,
-        )
-
-    with connection:
-        transaction = connection.begin()
-        try:
-            # 名称仅由固定前缀和随机十六进制字符组成，不使用外部输入。
-            schema = f"d_seed_test_{uuid4().hex}"
-            connection.exec_driver_sql(f'CREATE SCHEMA "{schema}"')
-            connection.exec_driver_sql(f'SET LOCAL search_path TO "{schema}"')
-            assert connection.exec_driver_sql("SELECT current_schema()").scalar_one() == schema
-
-            scripts = ScriptDirectory(str(ROOT / "backend" / "d" / "migrations"))
-            revisions = list(scripts.walk_revisions())
-            context = MigrationContext.configure(connection)
-            with Operations.context(context):
-                for revision in reversed(revisions):
-                    revision.module.upgrade()
-
-            factory = sessionmaker(
-                bind=connection,
-                expire_on_commit=False,
-                join_transaction_mode="create_savepoint",
-            )
-
-            def test_session_factory(module):
-                assert module == "d", "D seed 只能访问 D 数据库"
-                return factory
-
-            monkeypatch.setattr(seed_module, "session_factory", test_session_factory)
-            yield factory
-        finally:
-            # PostgreSQL 会同时回滚 schema、建表以及测试数据。
-            if transaction.is_active:
-                transaction.rollback()
 
 
 def snapshot(factory):
