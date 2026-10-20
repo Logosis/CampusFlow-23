@@ -135,7 +135,7 @@ def test_database_failure_does_not_report_success(monkeypatch, phase):
 def test_health_and_openapi_register_logout(client):
     missing = client.get("/health").json()["data"]["unfinishedFunctions"]
     assert not {"login", "get_identity", "logout"}.intersection(missing)
-    assert "check_permission" in missing
+    assert "check_permission" not in missing
     document = client.get("/openapi.json").json()
     assert "post" in document["paths"][_PATH]
     schema = document["components"]["schemas"]["LogoutInput"]

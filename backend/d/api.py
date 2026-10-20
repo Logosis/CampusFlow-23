@@ -2,7 +2,9 @@ from fastapi import APIRouter, Request
 
 from backend.d.login import login as perform_login
 from backend.d.logout import logout as perform_logout
+from backend.d.permissions import check_permission as perform_check_permission
 from backend.d.schemas import (
+    CheckPermissionInput, CheckPermissionOutput,
     IdentityInput, IdentityOutput, LoginInput, LoginOutput, LogoutInput, LogoutOutput,
 )
 from backend.shared.auth import bearer
@@ -32,3 +34,17 @@ async def get_identity(input: IdentityInput, request: Request):
 def logout(input: LogoutInput, request: Request):
     # 退出允许使用过期/已撤销凭据，不能调用要求当前会话有效的身份 resolver。
     return success(perform_logout(credential=bearer(request), request_id=input.requestId))
+
+
+@router.post("/check_permission", response_model=SuccessResponse[CheckPermissionOutput], tags=["permissions"])
+def check_permission(input: CheckPermissionInput, request: Request):
+    # 身份与来源只取 guard 的核验结果，不能接收请求体自报的主体。
+    mode = request.state.actor_mode
+    user_id = request.state.identity["userId"] if mode == "USER" else None
+    return success(perform_check_permission(
+        permission_code=input.permissionCode,
+        target_scope=input.targetScope.model_dump() if input.targetScope is not None else None,
+        actor_mode=mode,
+        source_module=request.state.source_module,
+        user_id=user_id,
+    ))

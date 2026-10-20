@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -252,3 +253,73 @@ class LoginSession(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+
+class Space(Base):
+    """统一空间资料；院系归属供范围权限判断使用。"""
+
+    __tablename__ = "spaces"
+    __table_args__ = (
+        CheckConstraint(
+            "(owner_kind = 'SCHOOL' AND department_id IS NULL) OR "
+            "(owner_kind = 'DEPARTMENT' AND department_id IS NOT NULL)",
+            name="ck_spaces_owner",
+        ),
+        CheckConstraint("version >= 1", name="ck_spaces_version"),
+        CheckConstraint("length(trim(name)) > 0", name="ck_spaces_name"),
+        CheckConstraint("length(trim(location)) > 0", name="ck_spaces_location"),
+    )
+
+    space_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    location: Mapped[str] = mapped_column(Text, nullable=False)
+    is_study_room: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    owner_kind: Mapped[str] = mapped_column(Text, nullable=False)
+    department_id: Mapped[str | None] = mapped_column(
+        Text, ForeignKey("departments.department_id"), nullable=True, index=True
+    )
+    registered: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+
+
+class SystemSubject(Base):
+    """后台模块的授权主体；模块身份仍由共同凭据校验确定。"""
+
+    __tablename__ = "system_subjects"
+    __table_args__ = (
+        CheckConstraint("module_id IN ('m1', 'm2', 'm3')", name="ck_system_subjects_module"),
+        CheckConstraint("status IN ('ACTIVE', 'DISABLED')", name="ck_system_subjects_status"),
+    )
+
+    module_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    status: Mapped[str] = mapped_column(Text, nullable=False, server_default="ACTIVE")
+
+
+class SystemGrant(Base):
+    """SYSTEM 模式的持久化授权，与用户角色授权分开保存。"""
+
+    __tablename__ = "system_grants"
+    __table_args__ = (
+        CheckConstraint(
+            "(scope_type = 'GLOBAL' AND scope_id IS NULL) OR "
+            "(scope_type IN ('DEPARTMENT', 'SPACE') "
+            "AND scope_id IS NOT NULL AND length(trim(scope_id)) > 0)",
+            name="ck_system_grants_scope",
+        ),
+        UniqueConstraint(
+            "module_id", "permission_code", "scope_type", "scope_id",
+            name="uq_system_grants_scope",
+            postgresql_nulls_not_distinct=True,
+        ),
+    )
+
+    grant_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    module_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("system_subjects.module_id"), nullable=False
+    )
+    permission_code: Mapped[str] = mapped_column(
+        Text, ForeignKey("permissions.code"), nullable=False
+    )
+    scope_type: Mapped[str] = mapped_column(Text, nullable=False)
+    scope_id: Mapped[str | None] = mapped_column(Text, nullable=True)

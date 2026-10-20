@@ -1,4 +1,4 @@
-"""D 登录与身份的公开输入输出格式。"""
+"""D 身份与权限的公开输入输出格式。"""
 
 from typing import Annotated, Literal
 
@@ -70,3 +70,37 @@ class LoginOutput(OutputModel):
     credential: Id
     expiresAt: IsoTime
     identity: IdentityOutput
+
+
+class ScopeInput(InputModel):
+    type: Literal["GLOBAL", "DEPARTMENT", "SPACE"]
+    id: Id | None
+
+    @model_validator(mode="after")
+    def validate_scope_id(self):
+        if self.type == "GLOBAL" and self.id is not None:
+            raise ValueError("GLOBAL scope must have a null id")
+        if self.type != "GLOBAL" and (self.id is None or not self.id.strip()):
+            raise ValueError("DEPARTMENT and SPACE scopes require an id")
+        return self
+
+
+class CheckPermissionInput(InputModel):
+    permissionCode: Id
+    # 可以省略，但显式传 null 不合法；默认值不参与 Pydantic 的输入校验。
+    targetScope: ScopeInput = Field(default=None)
+
+    @field_validator("permissionCode")
+    @classmethod
+    def validate_permission_code(cls, value):
+        if not value.strip():
+            raise ValueError("permissionCode must not be blank")
+        return value
+
+
+class CheckPermissionOutput(OutputModel):
+    subjectType: Literal["USER", "SYSTEM"]
+    subjectId: Id
+    allowed: bool
+    allowedScopes: list[ScopeOutput]
+    reason: Id
