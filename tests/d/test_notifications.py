@@ -362,7 +362,7 @@ def http_error(result, status, code):
 def test_http_full_contract_and_health(client, fixture_data):
     health = client.get('/health').json()['data']
     assert set(health['unfinishedFunctions']) == {'manage_roles', 'maintain_master', 'audit'}
-    assert health['workerConfigured'] is False
+    assert health['workerConfigured'] is True
     response = client.post(SEND, json=payload(), headers=headers())
     assert response.status_code == 200
     result = response.json()

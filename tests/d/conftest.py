@@ -75,3 +75,22 @@ def isolated_db(monkeypatch):
             # PostgreSQL 会同时回滚 schema、建表以及测试数据。
             if transaction.is_active:
                 transaction.rollback()
+
+
+
+@pytest.fixture(autouse=True)
+def pause_background_notifications(monkeypatch):
+    """HTTP 用例仅验接口；禁止其 lifespan 访问真实队列或干扰隔离事务。
+
+    worker 专项用例通过 notification_worker_enabled 显式恢复真实批处理。
+    """
+    from backend.d import notification_worker
+    original = notification_worker.run_batch
+    monkeypatch.setattr(notification_worker, 'run_batch', lambda: 0)
+    return original
+
+
+@pytest.fixture
+def notification_worker_enabled(pause_background_notifications, monkeypatch):
+    from backend.d import notification_worker
+    monkeypatch.setattr(notification_worker, 'run_batch', pause_background_notifications)
