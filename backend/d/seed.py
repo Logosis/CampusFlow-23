@@ -3,7 +3,7 @@ import json
 from argon2 import PasswordHasher
 
 from backend.d.models import (
-    Department, Permission, Role, RoleGrant, Seat, Space, SystemGrant, SystemSubject, User, UserRole,
+    PublicConfig, Department, Permission, Role, RoleGrant, Seat, Space, SystemGrant, SystemSubject, User, UserRole,
 )
 from backend.shared.db import session_factory
 from backend.shared.settings import ROOT, Settings
@@ -50,7 +50,7 @@ def _validate_new_seat(db, item):
 
 
 def seed():
-    """初始化身份、空间、座位和后台授权测试数据，保留已有记录及其修改。"""
+    """初始化身份、主数据、后台授权和公共设置测试数据，保留已有记录及其修改。"""
     if Settings.load("d").app_env != "test":
         raise RuntimeError("D seed requires APP_ENV=test")
 
@@ -58,6 +58,7 @@ def seed():
     fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
     password_hasher = PasswordHasher()
 
+    public_config_added = 0
     departments_added = 0
     permissions_added = 0
     roles_added = 0
@@ -201,6 +202,21 @@ def seed():
                 ))
                 system_grants_added += 1
 
+        if db.get(PublicConfig, 1) is None:
+            config = fixture["d"]
+            retry_limit = config.get("notificationRetryLimit")
+            if (
+                config.get("authMethod") != "PASSWORD"
+                or config.get("notificationChannel") != "EMAIL"
+                or type(retry_limit) is not int or not 0 <= retry_limit <= 5
+            ):
+                raise ValueError("Invalid public config in fixture")
+            db.add(PublicConfig(
+                config_id=1, auth_method="PASSWORD", notification_channel="EMAIL",
+                notification_retry_limit=retry_limit, version=1,
+            ))
+            public_config_added = 1
+
     print(
         f"D catalog seed: departments_added={departments_added}, "
         f"permissions_added={permissions_added}"
@@ -216,3 +232,4 @@ def seed():
         f"system_grants_added={system_grants_added}"
     )
     print(f"D seat seed: seats_added={seats_added}")
+    print(f"D public config seed: public_config_added={public_config_added}")

@@ -352,3 +352,39 @@ class Seat(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     socket_tags: Mapped[list[str]] = mapped_column(JSON, nullable=False, server_default="[]")
     version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+
+
+class PublicConfig(Base):
+    """单份公共设置；只保存公开参数，不存储服务秘密。"""
+
+    __tablename__ = "public_config"
+    __table_args__ = (
+        CheckConstraint("config_id = 1", name="ck_public_config_singleton"),
+        CheckConstraint("auth_method = 'PASSWORD'", name="ck_public_config_auth"),
+        CheckConstraint("notification_channel = 'EMAIL'", name="ck_public_config_channel"),
+        CheckConstraint("notification_retry_limit BETWEEN 0 AND 5", name="ck_public_config_retry"),
+        CheckConstraint("version >= 1", name="ck_public_config_version"),
+    )
+
+    config_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=False)
+    auth_method: Mapped[str] = mapped_column(Text, nullable=False)
+    notification_channel: Mapped[str] = mapped_column(Text, nullable=False)
+    notification_retry_limit: Mapped[int] = mapped_column(Integer, nullable=False)
+    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+
+
+class PublicConfigRequest(Base):
+    """仅用于 M1 的 manage_public_config 请求，成功结果随配置原子保存。"""
+
+    __tablename__ = "public_config_requests"
+    __table_args__ = (
+        CheckConstraint("length(trim(request_id)) > 0", name="ck_public_config_requests_id"),
+    )
+
+    request_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    input_data: Mapped[dict] = mapped_column(JSON, nullable=False)
+    response_data: Mapped[dict] = mapped_column(JSON, nullable=False)
+    requested_by_user_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("users.user_id"), nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Request
 
+from backend.d.public_config import manage_public_config as perform_manage_public_config
+from backend.d.public_config_schemas import PublicConfigInput, PublicConfigOutput
 from backend.d.people import query_people as perform_query_people
 from backend.d.people_schemas import QueryPeopleInput, QueryPeopleOutput
 from backend.d.master import query_master as perform_query_master
@@ -69,4 +71,12 @@ def query_people(input: QueryPeopleInput, request: Request):
     return success(perform_query_people(
         input=input, actor_mode=mode, source_module=request.state.source_module,
         user_id=request.state.identity["userId"] if mode == "USER" else None,
+    ))
+
+
+@router.post("/manage_public_config", response_model=SuccessResponse[PublicConfigOutput], tags=["config"])
+def manage_public_config(input: PublicConfigInput, request: Request):
+    return success(perform_manage_public_config(
+        input=input, actor_mode=request.state.actor_mode,
+        source_module=request.state.source_module, user_id=request.state.identity["userId"],
     ))
