@@ -206,19 +206,26 @@ def test_system_grant_constraints_include_unique_global_scope(isolated_db, chang
 
 def test_new_migration_preserves_existing_identity_data_and_can_be_seeded(isolated_db):
     seed_module.seed()
-    new_tables = {"spaces", "system_subjects", "system_grants"}
+    identity_tables = {
+        "departments", "users", "roles", "permissions", "role_grants", "user_roles", "login_sessions",
+    }
+    new_tables = set(Base.metadata.tables) - identity_tables
     before = snapshot(isolated_db, exclude=new_tables)
     scripts = ScriptDirectory(str(ROOT / "backend" / "d" / "migrations"))
-    migration = scripts.get_revision("d_09c1a686d136").module
+    # 在完整的当前迁移链中，先撤销依赖空间的后续表，再撤销本次三表。
+    revisions = list(scripts.walk_revisions(base="d_09c1a686d136", head="head"))
+    assert revisions[-1].revision == "d_09c1a686d136"
     # 仅操作普通测试 fixture 的随机 schema，模拟已有身份数据上的升级。
     with isolated_db.begin() as db:
         schema = db.scalar(text("SELECT current_schema()"))
         assert re.fullmatch(r"d_seed_test_[0-9a-f]{32}", schema)
         with Operations.context(MigrationContext.configure(db.connection())):
-            migration.downgrade()
-            migration.upgrade()
-        for model in (Space, SystemSubject, SystemGrant):
-            assert db.scalar(select(func.count()).select_from(model)) == 0
+            for revision in revisions:
+                revision.module.downgrade()
+            for revision in reversed(revisions):
+                revision.module.upgrade()
+        for name in new_tables:
+            assert db.scalar(select(func.count()).select_from(Base.metadata.tables[name])) == 0
     unchanged = snapshot(isolated_db, exclude=new_tables) == before
     assert unchanged
     seed_module.seed()

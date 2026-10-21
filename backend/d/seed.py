@@ -3,7 +3,7 @@ import json
 from argon2 import PasswordHasher
 
 from backend.d.models import (
-    Department, Permission, Role, RoleGrant, Space, SystemGrant, SystemSubject, User, UserRole,
+    Department, Permission, Role, RoleGrant, Seat, Space, SystemGrant, SystemSubject, User, UserRole,
 )
 from backend.shared.db import session_factory
 from backend.shared.settings import ROOT, Settings
@@ -28,8 +28,29 @@ def _valid_scope(db, permission, scope):
     return False
 
 
+def _validate_new_seat(db, item):
+    """初始化新增座位前核对字段及归属；已有座位整体跳过。"""
+    for key in ("seatId", "seatCode", "spaceId"):
+        if not isinstance(item.get(key), str) or not item[key].strip():
+            raise ValueError("Invalid seat identifier or code in fixture")
+    if any(type(item.get(key)) is not bool for key in ("registered", "enabled")):
+        raise ValueError("Invalid seat status in fixture")
+    if type(item.get("version")) is not int or item["version"] < 1:
+        raise ValueError("Invalid seat version in fixture")
+    tags = item.get("socketTags")
+    if (
+        not isinstance(tags, list)
+        or any(not isinstance(tag, str) or tag not in {"FIXED", "RAIL"} for tag in tags)
+        or len(tags) != len(set(tags))
+    ):
+        raise ValueError("Invalid seat socket tags in fixture")
+    space = db.get(Space, item["spaceId"])
+    if space is None or (item["registered"] and not space.registered):
+        raise ValueError("Invalid seat space in fixture")
+
+
 def seed():
-    """初始化身份、空间和后台授权测试数据，保留已有记录及其修改。"""
+    """初始化身份、空间、座位和后台授权测试数据，保留已有记录及其修改。"""
     if Settings.load("d").app_env != "test":
         raise RuntimeError("D seed requires APP_ENV=test")
 
@@ -44,6 +65,7 @@ def seed():
     users_added = 0
     user_roles_added = 0
     spaces_added = 0
+    seats_added = 0
     system_subjects_added = 0
     system_grants_added = 0
 
@@ -82,6 +104,25 @@ def seed():
                 version=item["version"],
             ))
             spaces_added += 1
+        db.flush()
+
+        for item in fixture["seats"]:
+            seat_id = item.get("seatId")
+            if not isinstance(seat_id, str) or not seat_id.strip():
+                raise ValueError("Invalid seat identifier in fixture")
+            if db.get(Seat, seat_id) is not None:
+                continue
+            _validate_new_seat(db, item)
+            db.add(Seat(
+                seat_id=seat_id,
+                seat_code=item["seatCode"],
+                space_id=item["spaceId"],
+                registered=item["registered"],
+                enabled=item["enabled"],
+                socket_tags=item["socketTags"],
+                version=item["version"],
+            ))
+            seats_added += 1
         db.flush()
 
         for item in fixture["roles"].values():
@@ -174,3 +215,4 @@ def seed():
         f"system_subjects_added={system_subjects_added}, "
         f"system_grants_added={system_grants_added}"
     )
+    print(f"D seat seed: seats_added={seats_added}")

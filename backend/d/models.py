@@ -323,3 +323,32 @@ class SystemGrant(Base):
     )
     scope_type: Mapped[str] = mapped_column(Text, nullable=False)
     scope_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class Seat(Base):
+    """统一座位主数据；注销保留记录及其座位号。"""
+
+    __tablename__ = "seats"
+    __table_args__ = (
+        CheckConstraint("length(trim(seat_id)) > 0", name="ck_seats_id"),
+        CheckConstraint("length(trim(seat_code)) > 0", name="ck_seats_code"),
+        CheckConstraint("version >= 1", name="ck_seats_version"),
+        # 两种标签均可省、可组合且不得重复；JSON 数组顺序不作要求。
+        CheckConstraint(
+            "socket_tags::jsonb IN ('[]'::jsonb, '[\"FIXED\"]'::jsonb, "
+            "'[\"RAIL\"]'::jsonb, '[\"FIXED\", \"RAIL\"]'::jsonb, "
+            "'[\"RAIL\", \"FIXED\"]'::jsonb)",
+            name="ck_seats_socket_tags",
+        ),
+        UniqueConstraint("seat_code", name="uq_seats_seat_code"),
+    )
+
+    seat_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    seat_code: Mapped[str] = mapped_column(Text, nullable=False)
+    space_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("spaces.space_id"), nullable=False, index=True
+    )
+    registered: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    socket_tags: Mapped[list[str]] = mapped_column(JSON, nullable=False, server_default="[]")
+    version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")

@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Request
 
+from backend.d.master import query_master as perform_query_master
+from backend.d.master_schemas import QueryMasterInput, QueryMasterOutput
 from backend.d.login import login as perform_login
 from backend.d.logout import logout as perform_logout
 from backend.d.permissions import check_permission as perform_check_permission
@@ -47,4 +49,13 @@ def check_permission(input: CheckPermissionInput, request: Request):
         actor_mode=mode,
         source_module=request.state.source_module,
         user_id=user_id,
+    ))
+
+
+@router.post("/query_master", response_model=SuccessResponse[QueryMasterOutput], tags=["master"])
+def query_master(input: QueryMasterInput, request: Request):
+    mode = request.state.actor_mode
+    return success(perform_query_master(
+        input=input, actor_mode=mode, source_module=request.state.source_module,
+        user_id=request.state.identity["userId"] if mode == "USER" else None,
     ))
