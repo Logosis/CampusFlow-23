@@ -2,7 +2,7 @@
 
 本版固定服务编号、函数名、输入输出；D-F01 身份权限、D-F02 空间座位、D-F03 通知、D-F04 审计范围不变。依据：[任务书](../../../../Pj-任务书.pdf)第 1 页。
 
-**状态：开发中。D-S01 登录、D-S02 当前身份、D-S03 退出、D-S04 权限判断与 D-S06 主数据查询已提供实现和测试代码；其他公开接口尚未实现，完整模块验收与跨模块联调尚未完成。** 初版采用账号密码登录、邮件通知；这是本组起始方案，后续调整须同步调用方。只约定公开接口，不设计内部表、类或任务。
+**状态：开发中。D-S01 登录、D-S02 当前身份、D-S03 退出、D-S04 权限判断、D-S06 主数据查询与 D-S08 人员查询已提供实现和测试代码；其他公开接口尚未实现，完整模块验收与跨模块联调尚未完成。** 初版采用账号密码登录、邮件通知；这是本组起始方案，后续调整须同步调用方。只约定公开接口，不设计内部表、类或任务。
 
 公共规则见[开发指导：公共规则 v1](../../../开发指导.md#3-公共规则-v1)。下表“输出”均指成功返回的 data；函数统一接收 input。
 
@@ -93,6 +93,14 @@ includeUnregistered 默认 false，列表与详情均隐藏已注销记录；座
 - 输入：{mode:CANDIDATES/BY_IDS,purpose:APPROVAL/DISPATCH/ESCALATION/ACCEPTANCE/DISPLAY,permissionCodes:[str],targetScope:与S04一致,userIds?:[str],limit?:int,cursor?:str}。
 - 输出：CANDIDATES 返回分页；BY_IDS 返回 {people:[单项]}。单项为 {userId:str,displayName:str,departmentId:str/null,accountStatus:ACTIVE/DISABLED,eligible:bool/null,matchedPermissionCodes:[str]}。
 - BY_IDS 必填 userIds，顺序与输入一致；候选具备全部所需权限。DISPLAY 仅 BY_IDS，permissionCodes=[]、eligible=null；其他用途权限非空。无资格与人员不存在分别报告，不返回联系方式或业务工作量。
+
+D-S08 实现细化：仅可信 M2/M3 可按 USER 或 SYSTEM 调用，先以当前主体的 d.people.read 校验完整 targetScope；没有覆盖该目标的权限返回 FORBIDDEN，不因模块有后台权限而放行失败的 USER。前端与 M1 不能直调。mode、purpose、permissionCodes、targetScope 均必填，BY_IDS 必填 userIds；仅 CANDIDATES 接受 limit/cursor，字段严格按类型校验，拒绝多余字段、显式 null 或空白标识。
+
+资格采用与 S04 相同的范围覆盖规则及权限目录 allowedScopeTypes，只读取 ACTIVE 角色的当前授权；多项权限可以来自不同角色，但必须全部覆盖 targetScope。人员所属院系不是隐式授权，也不限制已获其他院系或 GLOBAL 授权的人选。重复权限编码按集合处理，matchedPermissionCodes 去重后按编码排序；有部分资格时仅返回已满足的编码。停用账号在资格核验中 eligible=false、matchedPermissionCodes=[]，不进入候选列表。DISPLAY 不进行资格判断，即使展示停用账号也保持 eligible=null、matchedPermissionCodes=[]，同时返回其 accountStatus。
+
+BY_IDS 保留输入顺序和重复项；空 userIds 在调用权限及引用校验通过后返回 people=[]。任何用户不存在时整批返回 NOT_FOUND，不用 eligible=false 代替，也不返回部分结果；未知资格编码或目标范围引用同样返回 NOT_FOUND。CANDIDATES 只列启用且满足全部资格的人员，在数据库内先筛选再分页；多个有效角色或重叠范围不重复返回同一人，无合格人员正常返回空列表。查询仅投影约定的基本资料与资格，不返回登录账号、联系方式、密码哈希或会话凭据。
+
+候选按 userId 升序，limit 默认 20、范围 1—100，复用签名游标绑定用途、有效资格编码集合、目标范围、limit、来源模块、主体和当前读取权限范围。条件不匹配或游标损坏返回 INVALID_ARGUMENT；调用权限全部撤销返回 FORBIDDEN。每页重新读取当前资格，停用或撤销立即影响后续查询，不承诺跨页历史快照。已保留的停用/注销空间仍可作为历史业务的资格目标，按其当前归属判断覆盖；是否允许新的业务、是否属于当前工单/申请、是否应排除承接人由 M2/M3 检查。D 不替代这些业务关系判断。存储失败返回 UNAVAILABLE，不伪装为空名单。上述为 D 的实现补充，未改变公开字段，真实调用方联调仍待完成。
 
 ## 3. 通知与审计
 
