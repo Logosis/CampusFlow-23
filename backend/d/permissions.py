@@ -136,3 +136,21 @@ def check_permission(*, permission_code, target_scope, actor_mode, source_module
             )
     except (OperationalError, SQLAlchemyTimeoutError):
         raise ApiError("UNAVAILABLE", "权限存储暂时不可用，请稍后重试") from None
+
+
+def check_user_permission_in_session(db, *, permission_code, target_scope, user_id):
+    """供允许直接 USER 管理查询的 D 服务复用当前用户授权；不授予模块身份。"""
+    if not isinstance(user_id, str) or not user_id.strip():
+        raise ApiError("UNAUTHENTICATED", "需要已核验的用户身份")
+    grants = build_identity(db, user_id)["grants"]
+    permission = db.get(Permission, permission_code)
+    if permission is None:
+        raise ApiError("NOT_FOUND", "权限编码不存在")
+    department = _target_department(db, target_scope)
+    scopes = _effective_scopes(db, permission, grants)
+    allowed = bool(scopes) if target_scope is None else any(
+        _covers(scope, target_scope, department) for scope in scopes
+    )
+    return {"subjectType": "USER", "subjectId": user_id, "allowed": allowed,
+            "allowedScopes": scopes,
+            "reason": "GRANTED" if allowed else ("OUT_OF_SCOPE" if scopes else "NO_GRANT")}

@@ -13,6 +13,10 @@ from backend.d.schemas import (
     CheckPermissionInput, CheckPermissionOutput,
     IdentityInput, IdentityOutput, LoginInput, LoginOutput, LogoutInput, LogoutOutput,
 )
+from backend.d.notifications import (
+    send_notification as perform_send_notification, get_notification as perform_get_notification,
+)
+from backend.d.notification_schemas import GetNotificationInput, SendNotificationInput, NotificationOutput
 from backend.shared.auth import bearer
 from backend.shared.errors import success
 from backend.shared.models import SuccessResponse
@@ -79,4 +83,22 @@ def manage_public_config(input: PublicConfigInput, request: Request):
     return success(perform_manage_public_config(
         input=input, actor_mode=request.state.actor_mode,
         source_module=request.state.source_module, user_id=request.state.identity["userId"],
+    ))
+
+
+@router.post("/send_notification", response_model=SuccessResponse[NotificationOutput], tags=["notifications"])
+def send_notification(input: SendNotificationInput, request: Request):
+    mode = request.state.actor_mode
+    return success(perform_send_notification(
+        input=input, actor_mode=mode, source_module=request.state.source_module,
+        user_id=request.state.identity["userId"] if mode == "USER" else None,
+    ))
+
+
+@router.post("/get_notification", response_model=SuccessResponse[NotificationOutput], tags=["notifications"])
+def get_notification(input: GetNotificationInput, request: Request):
+    mode = request.state.actor_mode
+    return success(perform_get_notification(
+        input=input, actor_mode=mode, source_module=request.state.source_module,
+        user_id=request.state.identity["userId"] if mode == "USER" else None,
     ))

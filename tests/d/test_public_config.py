@@ -356,7 +356,7 @@ def test_uncertain_response_after_commit_can_be_retried_without_reapplying(confi
 
 def test_http_health_and_full_success_conflict_and_idempotency(db_client, fixture_data):
     missing = db_client.get("/health").json()["data"]["unfinishedFunctions"]
-    assert "manage_public_config" not in missing and "send_notification" in missing
+    assert "manage_public_config" not in missing and "audit" in missing
     schema = db_client.get("/openapi.json").json()
     body_schema = schema["paths"][PATH]["post"]["requestBody"]["content"]["application/json"]["schema"]
     assert body_schema["discriminator"]["propertyName"] == "operation"

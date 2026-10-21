@@ -6,6 +6,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    Index,
     JSON,
     Text,
     UniqueConstraint,
@@ -388,3 +389,68 @@ class PublicConfigRequest(Base):
         Text, ForeignKey("users.user_id"), nullable=False,
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class Notification(Base):
+    """一个已受理通知；输入快照与受理时重试上限供幂等和后续投递使用。"""
+
+    __tablename__ = "notifications"
+    __table_args__ = (
+        CheckConstraint('length(trim(notification_id)) > 0', name='ck_notifications_id'),
+        CheckConstraint('length(trim(request_id)) > 0', name='ck_notifications_request'),
+        CheckConstraint('length(trim(business_id)) > 0', name='ck_notifications_business'),
+        CheckConstraint("source_module IN ('M1', 'M2', 'M3')", name='ck_notifications_source'),
+        CheckConstraint("(source_module = 'M1' AND kind IN ('M1_BEFORE_START', 'M1_NOT_CHECKED_IN', 'M1_AUTO_CANCELLED', 'M1_MAINTENANCE_CANCELLED')) OR (source_module = 'M2' AND kind IN ('M2_APPROVAL_PENDING', 'M2_APPROVED', 'M2_REJECTED', 'M2_TIMEOUT_CANCELLED', 'M2_CANCELLED')) OR (source_module = 'M3' AND kind IN ('M3_ASSIGNED', 'M3_REPAIR_STARTED', 'M3_TIMEOUT_ESCALATED', 'M3_ACCEPTANCE_PENDING', 'M3_ACCEPTANCE_RESULT', 'M3_CANCELLED'))", name='ck_notifications_kind'),
+        CheckConstraint("channel = 'EMAIL'", name='ck_notifications_channel'),
+        CheckConstraint('length(trim(title)) > 0 AND length(title) <= 2000 AND position(chr(10) in title) = 0 AND position(chr(13) in title) = 0', name='ck_notifications_title'),
+        CheckConstraint('length(trim(body)) > 0 AND length(body) <= 2000', name='ck_notifications_body'),
+        CheckConstraint('retry_limit BETWEEN 0 AND 5', name='ck_notifications_retry'),
+        CheckConstraint("jsonb_typeof(input_data::jsonb) = 'object'", name='ck_notifications_input'),
+        UniqueConstraint("source_module", "request_id", name="uq_notifications_source_request"),
+    )
+
+    notification_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    source_module: Mapped[str] = mapped_column(Text, nullable=False)
+    request_id: Mapped[str] = mapped_column(Text, nullable=False)
+    business_id: Mapped[str] = mapped_column(Text, nullable=False)
+    space_id: Mapped[str | None] = mapped_column(Text, ForeignKey("spaces.space_id"), nullable=True, index=True)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    channel: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    retry_limit: Mapped[int] = mapped_column(Integer, nullable=False)
+    input_data: Mapped[dict] = mapped_column(JSON, nullable=False)
+
+
+class NotificationDelivery(Base):
+    """每个收件人的持久投递记录，区分未尝试、处理中、渠道接受和未知结果。"""
+
+    __tablename__ = "notification_deliveries"
+    __table_args__ = (
+        CheckConstraint('recipient_order >= 0', name='ck_notification_deliveries_order'),
+        CheckConstraint("status IN ('PENDING', 'SENDING', 'SUBMITTED', 'FAILED', 'UNKNOWN')", name='ck_notification_deliveries_status'),
+        CheckConstraint('attempt_count BETWEEN 0 AND 6', name='ck_notification_deliveries_count'),
+        CheckConstraint('(attempt_count = 0 AND last_attempt_at IS NULL) OR (attempt_count > 0 AND last_attempt_at IS NOT NULL)', name='ck_notification_deliveries_attempt'),
+        CheckConstraint("status NOT IN ('SENDING', 'SUBMITTED', 'UNKNOWN') OR attempt_count > 0", name='ck_notification_deliveries_attempted_status'),
+        CheckConstraint("(status = 'PENDING' AND next_attempt_at IS NOT NULL) OR (status <> 'PENDING' AND next_attempt_at IS NULL)", name='ck_notification_deliveries_next'),
+        CheckConstraint("(status = 'SENDING' AND attempt_token IS NOT NULL AND length(trim(attempt_token)) > 0 AND lease_expires_at IS NOT NULL AND lease_expires_at > last_attempt_at) OR (status <> 'SENDING' AND attempt_token IS NULL AND lease_expires_at IS NULL)", name='ck_notification_deliveries_lease'),
+        CheckConstraint('recipient_email IS NULL OR (length(trim(recipient_email)) > 0 AND position(chr(10) in recipient_email) = 0 AND position(chr(13) in recipient_email) = 0)', name='ck_notification_deliveries_email'),
+        CheckConstraint("status NOT IN ('SENDING', 'SUBMITTED', 'UNKNOWN') OR recipient_email IS NOT NULL", name='ck_notification_deliveries_address'),
+        CheckConstraint('length(trim(reason)) > 0', name='ck_notification_deliveries_reason'),
+        UniqueConstraint("notification_id", "recipient_order", name="uq_notification_deliveries_order"),
+        Index("ix_notification_deliveries_due", "status", "next_attempt_at"),
+        Index("ix_notification_deliveries_lease", "status", "lease_expires_at"),
+    )
+
+    notification_id: Mapped[str] = mapped_column(Text, ForeignKey("notifications.notification_id"), primary_key=True)
+    recipient_user_id: Mapped[str] = mapped_column(Text, ForeignKey("users.user_id"), primary_key=True)
+    recipient_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    recipient_email: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    attempt_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempt_token: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
