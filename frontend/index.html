@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="same-origin">
+  <title>首页 · CampusFlow 校园服务</title>
+  <link rel="stylesheet" href="/shared/d.css">
+  <script type="module" src="/shared/d-pages.js"></script>
+</head>
+<body data-page="home">
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="CampusFlow 首页"><span class="brand-mark" aria-hidden="true">C</span>CampusFlow<span class="brand-caption">校园服务</span></a>
+    <button id="logout" class="secondary" type="button">退出登录</button>
+  </header>
+  <main class="home-main">
+    <div id="message" class="message" role="status" aria-live="polite" hidden></div>
+    <button id="retry" class="secondary" type="button" hidden>重新读取身份</button>
+    <section id="workspace" hidden>
+      <div class="home-heading">
+        <p class="eyebrow accent">你的校园工作台</p>
+        <h1>你好，<span id="display-name"></span>。</h1>
+        <p class="intro">从这里开始，安排今天的校园日常。</p>
+      </div>
+      <nav class="module-grid" aria-label="校园服务入口">
+        <a class="module-card" href="/m1/">
+          <span class="card-top"><span class="module-icon" aria-hidden="true">01</span><span class="arrow" aria-hidden="true">↗</span></span>
+          <h2>自习座位</h2><p>寻找合适的自习空间，管理预约、签到与使用记录。</p><span class="card-action">进入座位服务 <span aria-hidden="true">→</span></span>
+        </a>
+        <a class="module-card" href="/m2/">
+          <span class="card-top"><span class="module-icon" aria-hidden="true">02</span><span class="arrow" aria-hidden="true">↗</span></span>
+          <h2>教室预约</h2><p>为活动申请整间教室，查看申请与逐级审批进度。</p><span class="card-action">进入教室服务 <span aria-hidden="true">→</span></span>
+        </a>
+        <a class="module-card" href="/m3/">
+          <span class="card-top"><span class="module-icon" aria-hidden="true">03</span><span class="arrow" aria-hidden="true">↗</span></span>
+          <h2>物业报修</h2><p>提交校园设施问题，跟进维修处理与完工验收。</p><span class="card-action">进入报修服务 <span aria-hidden="true">→</span></span>
+        </a>
+      </nav>
+      <section class="identity-panel" aria-labelledby="identity-title">
+        <div><p class="eyebrow accent">当前身份</p><h2 id="identity-title">账号信息</h2><p class="muted">可用操作以服务端当前授权为准。</p></div>
+        <dl><div><dt>用户编号</dt><dd id="user-id"></dd></div><div><dt>所属院系</dt><dd id="department"></dd></div><div><dt>当前角色</dt><dd id="roles"></dd></div></dl>
+      </section>
+    </section>
+    <noscript><p class="message">请启用 JavaScript 后使用校园服务。</p></noscript>
+  </main>
+  <footer class="site-footer">CampusFlow <span aria-hidden="true">/</span> 校园公共服务</footer>
+</body>
+</html>
