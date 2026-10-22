@@ -12,6 +12,8 @@ FILES = {
     '/shared/auth.js': ('shared/auth.js', 'text/javascript'),
     '/shared/d-session.js': ('shared/d-session.js', 'text/javascript'),
     '/shared/d-pages.js': ('shared/d-pages.js', 'text/javascript'),
+    '/shared/d-query.js': ('shared/d-query.js', 'text/javascript'),
+    '/shared/d-management.js': ('shared/d-management.js', 'text/javascript'),
     '/shared/d.css': ('shared/d.css', 'text/css'),
 }
 

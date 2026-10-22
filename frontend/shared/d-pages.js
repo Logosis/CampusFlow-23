@@ -1,9 +1,11 @@
+import { attachManagement } from "./d-management.js";
 import { getCredential } from "./auth.js";
 import { login, logout, currentIdentity, pendingLogin } from "./d-session.js";
 
 const $ = (id) => document.getElementById(id);
 const isLoginPage = document.body.dataset.page === "login";
 let busy = false;
+const management = attachManagement(() => location.replace("/login.html"));
 
 function message(text, kind = "error") {
   $("message").textContent = text;
@@ -30,7 +32,7 @@ function loginFields() {
 function setBusy(value) {
   busy = value;
   document.body.setAttribute("aria-busy", String(value));
-  for (const item of document.querySelectorAll("button, input")) item.disabled = value;
+  for (const item of document.querySelectorAll(isLoginPage ? "button, input" : "#logout, #retry")) item.disabled = value;
 }
 
 async function submitLogin(event) {
@@ -56,7 +58,7 @@ async function refreshIdentity() {
   if (busy) return;
   setBusy(true);
   message("正在读取当前身份…", "info");
-  if (!isLoginPage) $("workspace").hidden = true;
+  if (!isLoginPage) { $("workspace").hidden = true; management.setIdentity(null); }
   try {
     if (!getCredential()) {
       if (!isLoginPage) location.replace("/login.html");
@@ -69,6 +71,7 @@ async function refreshIdentity() {
     $("user-id").textContent = identity.userId;
     $("department").textContent = identity.departmentId || "未指定院系";
     $("roles").textContent = identity.roleIds.length ? identity.roleIds.join("、") : "暂未分配角色";
+    management.setIdentity(identity);
     $("workspace").hidden = false;
     message("");
   } catch (err) {
@@ -88,6 +91,7 @@ async function refreshIdentity() {
 async function submitLogout() {
   if (busy) return;
   setBusy(true);
+  management.setIdentity(null);
   message("正在确认退出…", "info");
   try {
     await logout();

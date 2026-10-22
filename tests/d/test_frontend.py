@@ -15,6 +15,8 @@ from backend.d import frontend
     ('/shared/auth.js', 'text/javascript', 'export async function api'),
     ('/shared/d-session.js', 'text/javascript', 'export async function logout'),
     ('/shared/d-pages.js', 'text/javascript', 'textContent'),
+    ('/shared/d-query.js', 'text/javascript', 'export class QueryReader'),
+    ('/shared/d-management.js', 'text/javascript', 'export function attachManagement'),
     ('/shared/d.css', 'text/css', '@media (max-width: 760px)'),
 ])
 def test_local_page_and_asset_responses(url, content_type, marker):

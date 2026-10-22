@@ -40,6 +40,58 @@
         <div><p class="eyebrow accent">当前身份</p><h2 id="identity-title">账号信息</h2><p class="muted">可用操作以服务端当前授权为准。</p></div>
         <dl><div><dt>用户编号</dt><dd id="user-id"></dd></div><div><dt>所属院系</dt><dd id="department"></dd></div><div><dt>当前角色</dt><dd id="roles"></dd></div></dl>
       </section>
+
+      <section id="management" class="management" aria-labelledby="management-title" hidden>
+        <div class="management-heading">
+          <div><p class="eyebrow accent">公共服务 · 管理查询</p><h2 id="management-title">通知与审计</h2><p class="muted">查询当前权限范围内的记录。结果以服务端本次返回为准。</p></div>
+          <nav class="query-links" aria-label="管理查询入口"><a id="notice-link" href="#notice-panel">通知状态 ↓</a><a id="audit-link" href="#audit-panel">审计记录 ↓</a></nav>
+        </div>
+        <section id="notice-panel" class="query-panel" aria-labelledby="notice-title" hidden>
+          <p class="eyebrow accent">01 / 通知状态</p><h3 id="notice-title">追踪每位收件人的投递情况</h3>
+          <p class="muted">支持按通知编号或原请求编号查询。SUBMITTED 表示邮件服务器已受理；UNKNOWN 表示结果未知。</p>
+          <form id="notice-form" class="query-form">
+            <div class="query-grid identifier-grid">
+              <div><label for="notice-kind">编号类型</label><select id="notice-kind" name="kind"><option value="notificationId">通知编号</option><option value="requestId">请求编号</option></select></div>
+              <div><label for="notice-identifier">编号</label><input id="notice-identifier" name="identifier" required autocomplete="off" placeholder="输入完整编号"></div>
+            </div>
+            <div class="query-actions"><button class="primary" type="submit">查询通知</button></div>
+          </form>
+          <div id="notice-message" class="message" role="status" aria-live="polite" hidden></div>
+          <div id="notice-result" class="query-result"></div>
+        </section>
+        <section id="audit-panel" class="query-panel" aria-labelledby="audit-title" hidden>
+          <p class="eyebrow accent">02 / 审计记录</p><h3 id="audit-title">查看操作记录与处理结果</h3>
+          <p class="muted">按发生时间从新到旧排列。展开一条记录可查看完整内容。</p>
+          <form id="audit-list-form" class="query-form">
+            <div class="query-grid">
+              <div><label for="audit-source">来源模块</label><select id="audit-source" name="sourceModule"><option value="">全部可见来源</option><option>M1</option><option>M2</option><option>M3</option><option>D</option></select></div>
+              <div><label for="audit-business">业务编号</label><input id="audit-business" name="businessId" autocomplete="off" placeholder="不限"></div>
+              <div><label for="audit-object">对象类型</label><input id="audit-object" name="objectType" autocomplete="off" placeholder="不限"></div>
+              <div><label for="audit-action">动作</label><input id="audit-action" name="action" autocomplete="off" placeholder="不限"></div>
+              <div><label for="audit-user">操作用户编号</label><input id="audit-user" name="actorUserId" autocomplete="off" placeholder="不限"></div>
+              <div><label for="audit-space">空间编号</label><input id="audit-space" name="spaceId" autocomplete="off" placeholder="不限"></div>
+              <div><label for="audit-from">开始时间（北京时间，含）</label><input id="audit-from" name="timeFrom" type="datetime-local" step="1"></div>
+              <div><label for="audit-to">结束时间（北京时间，不含）</label><input id="audit-to" name="timeTo" type="datetime-local" step="1"></div>
+              <div><label for="audit-limit">每页条数</label><input id="audit-limit" name="limit" type="number" min="1" max="100" step="1" required value="20"></div>
+            </div>
+            <div class="query-actions"><button class="primary" type="submit">查询第一页</button><button id="audit-next" class="secondary" type="button" disabled>下一页</button><span class="muted">修改条件后须重新查询。</span></div>
+          </form>
+          <div id="audit-list-message" class="message" role="status" aria-live="polite" hidden></div>
+          <div id="audit-list-result" class="query-result"></div>
+          <details class="audit-lookup"><summary>按编号查找单条记录</summary>
+            <form id="audit-get-form" class="query-form">
+              <div class="query-grid">
+                <div><label for="audit-get-kind">编号类型</label><select id="audit-get-kind" name="kind"><option value="auditId">审计编号</option><option value="requestId">请求编号</option></select></div>
+                <div><label for="audit-get-identifier">编号</label><input id="audit-get-identifier" name="identifier" required autocomplete="off" placeholder="输入完整编号"></div>
+                <div><label for="audit-get-source">来源模块（可选）</label><select id="audit-get-source" name="sourceModule"><option value="">全部可见来源</option><option>M1</option><option>M2</option><option>M3</option><option>D</option></select></div>
+              </div>
+              <div class="query-actions"><button class="primary" type="submit">查询单条审计</button></div>
+            </form>
+            <div id="audit-get-message" class="message" role="status" aria-live="polite" hidden></div>
+            <div id="audit-get-result" class="query-result"></div>
+          </details>
+        </section>
+      </section>
     </section>
     <noscript><p class="message">请启用 JavaScript 后使用校园服务。</p></noscript>
   </main>
