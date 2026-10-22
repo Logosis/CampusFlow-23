@@ -22,6 +22,10 @@ from backend.shared.errors import success
 from backend.shared.models import SuccessResponse
 
 
+from backend.d.audit import audit as perform_audit
+from backend.d.audit_schemas import AuditInput, AuditOutput
+
+
 router = APIRouter()
 
 
@@ -102,3 +106,11 @@ def get_notification(input: GetNotificationInput, request: Request):
         input=input, actor_mode=mode, source_module=request.state.source_module,
         user_id=request.state.identity["userId"] if mode == "USER" else None,
     ))
+
+
+
+@router.post('/audit', response_model=SuccessResponse[AuditOutput], tags=['audit'])
+def audit(input: AuditInput, request: Request):
+    mode = request.state.actor_mode
+    return success(perform_audit(input=input, actor_mode=mode, source_module=request.state.source_module,
+                                user_id=request.state.identity['userId'] if mode == 'USER' else None))

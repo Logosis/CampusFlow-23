@@ -2,7 +2,7 @@
 
 本版固定服务编号、函数名、输入输出；D-F01 身份权限、D-F02 空间座位、D-F03 通知、D-F04 审计范围不变。依据：[任务书](../../../../Pj-任务书.pdf)第 1 页。
 
-**状态：开发中。D-S01 登录、D-S02 当前身份、D-S03 退出、D-S04 权限判断、D-S06 主数据查询、D-S08 人员查询、D-S09 通知受理、D-S10 通知查询与 D-S12 公共设置已提供实现和测试代码；通知后台邮件投递已通过本地PostgreSQL与Mailpit验收；其他公开接口尚未实现，完整模块验收与跨模块联调尚未完成。** 初版采用账号密码登录、邮件通知；这是本组起始方案，后续调整须同步调用方。只约定公开接口，不设计内部表、类或任务。
+**状态：开发中。D-S01 登录、D-S02 当前身份、D-S03 退出、D-S04 权限判断、D-S06 主数据查询、D-S08 人员查询、D-S09 通知受理、D-S10 通知查询与 D-S12 公共设置已提供实现和测试代码；通知后台邮件投递已通过本地PostgreSQL与Mailpit验收；D-S11 审计已通过本地PostgreSQL与真实HTTP验收；D-S05角色管理、D-S07主数据维护尚未实现，完整模块验收与跨模块联调尚未完成。** 初版采用账号密码登录、邮件通知；这是本组起始方案，后续调整须同步调用方。只约定公开接口，不设计内部表、类或任务。
 
 公共规则见[开发指导：公共规则 v1](../../../开发指导.md#3-公共规则-v1)。下表“输出”均指成功返回的 data；函数统一接收 input。
 
@@ -160,6 +160,21 @@ D-S09后台投递补充（内部实现，不增加公开接口）：
 | LIST | 可省 {sourceModule:M1/M2/M3/D,businessId:str,objectType:str,action:str,actorUserId:str,spaceId:str,timeFrom:time,timeTo:time,limit:int,cursor:str} | 分页，单项同 APPEND 输出 |
 
 来源不可伪造；actorType 为 USER 时 actorId 是用户标识，SYSTEM 为来源模块，UNKNOWN 为 null。USER 模式只能追加当前已核验用户，verifiedBy=D；可信后台补报本模块先前核验的用户事件时 verifiedBy 为该模块。原模块可查自己的事件，跨来源须管理查看权限。不公开修改或删除。
+
+D-S11 实现细化：APPEND、GET、LIST分别声明严格输入；可省字段不接受显式null，未知字段拒绝。APPEND必须提供表中全部字段，只有actorId、spaceId允许null；USER的actorId为真实既有用户标识，SYSTEM的actorId等于大写sourceModule（例如M3），UNKNOWN为null。objectType、action、summary为1—2000字符非空白文本，标识沿用其他D接口的非空白字符串校验。occurredAt必须带时区，规范成UTC后保存、比较与返回；等价时区表示视为同一输入。输出包含auditId、requestId、sourceModule、actorType、actorId、objectType、businessId、spaceId、action、occurredAt、result、summary、verifiedBy，不回传operation，不公开内部记录时间或幂等快照。
+
+追加仅允许可信M1/M2/M3，sourceModule必须与已核验模块一致；每次以当前主体检查d.audit.append及目标范围。USER只允许actorType=USER且actorId等于已认证用户，verifiedBy=D；SYSTEM可以报告本模块的USER、SYSTEM或UNKNOWN事件，verifiedBy为来源模块，不能冒用被记录用户的权限。后台补报历史USER允许引用已停用但仍存在的用户；当前调用用户被停用则拒绝认证。保留的停用/注销空间可用于历史事件，按其当前归属判断权限；spaceId=null必须有GLOBAL权限。业务关系、触发时机、内容真实性和先前用户核验仍由来源模块负责。
+
+新增audit_events表及迁移d_d34b70ea2c91，承接d_c8215f90e4ab；数据库约束来源/状态/核验归属、用户和空间外键，并唯一约束(source_module,request_id)。追加使用同来源同请求号的事务锁串行化；再次核验当前权限后，同业务输入返回首次事件和原verifiedBy，USER/SYSTEM切换不改变首次记录，其他输入变化返回REQUEST_ID_REUSED。不同来源可使用相同请求号；记录和幂等输入在同一事务写入，提交后才确认成功。不增加更新、删除端点；此处不宣称特权数据库账号无法改写记录。
+
+GET/LIST先检查当前d.audit.read：SYSTEM只读自己的来源，显式指定其他来源返回FORBIDDEN，按其他来源auditId查询返回NOT_FOUND；USER管理查询允许跨来源及直接前端调用。权限范围先进入SQL筛选再分页，GLOBAL覆盖全部，DEPARTMENT覆盖当前属于该院系的空间，SPACE仅覆盖本空间，局部范围不含spaceId=null事件。GET必须且只能提供auditId或requestId；请求号对应多个当前可见来源时返回CONFLICT，须补sourceModule或改用auditId，不把不可见记录算入歧义。指定记录存在但超出当前范围返回FORBIDDEN。公开APPEND不接受sourceModule=D；查询保留D枚举，供今后内部事件使用，本批不自动产生D来源事件。
+
+LIST的多个筛选取交集；显式spaceId须存在且在当前权限范围，actorUserId须为既有用户，未知引用返回NOT_FOUND；其他无匹配条件返回空列表。时间窗口为[timeFrom,timeTo)，两端同传时必须前者小于后者。按(occurredAt,auditId)降序，以最后一条的组合键续查，limit默认20、范围1—100。签名游标绑定全部筛选、limit、当前主体、可信来源及当前有效授权，换条件、换主体、授权范围变化或篡改返回INVALID_ARGUMENT，全部读取权限撤销返回FORBIDDEN。每页读取当前数据，不承诺跨页历史快照；新增补报或空间归属变化后可从第一页重查。
+
+存储连接、锁等待或提交结果未知时返回UNAVAILABLE，日志保留D、S11、operation、requestId及错误类型，不打印事件摘要、凭据或底层SQL。未确认的追加应保留原sourceModule/requestId，按原输入重试或查询；暂时查无记录不证明并发原请求之后不会提交。上述是本模块实现补充，不修改其他模块或公共字段；真实跨模块业务联调尚待执行。
+
+本地验收记录（2026-10-22）：审计迁移已执行；共同基础与D模块1058项测试全部通过，包含数据库约束、真实事务、独立连接并发及HTTP契约检查。实际D服务审计验收通过：三来源同请求号隔离、幂等与换输入拒绝、核验归属、权限与严格输入、筛选时间边界及分页游标检查均PASS，保留6条测试审计事件。公共设置保持不变，临时测试会话已退出，health仅剩manage_roles、maintain_master未实现。这是D模块本地验收，不表示M1/M2/M3真实业务联调或整个D模块已完成。
+
 
 ## 4. 运行设置
 

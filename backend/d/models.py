@@ -454,3 +454,43 @@ class NotificationDelivery(Base):
     attempt_token: Mapped[str | None] = mapped_column(Text, nullable=True)
     lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class AuditEvent(Base):
+    """D-S11审计事件；只经业务服务追加，用户引用与来源核验责任分别保存。"""
+
+    __tablename__ = 'audit_events'
+    __table_args__ = (
+        CheckConstraint('length(trim(audit_id)) > 0', name='ck_audit_events_id'),
+        CheckConstraint('length(trim(request_id)) > 0', name='ck_audit_events_request'),
+        CheckConstraint("source_module IN ('M1','M2','M3','D')", name='ck_audit_events_source'),
+        CheckConstraint("actor_type IN ('USER','SYSTEM','UNKNOWN')", name='ck_audit_events_actor'),
+        CheckConstraint("(actor_type = 'USER' AND actor_user_id IS NOT NULL) OR (actor_type <> 'USER' AND actor_user_id IS NULL)", name='ck_audit_events_actor_user'),
+        CheckConstraint('length(trim(object_type)) > 0 AND length(object_type) <= 2000', name='ck_audit_events_object'),
+        CheckConstraint('length(trim(business_id)) > 0', name='ck_audit_events_business'),
+        CheckConstraint('length(trim(action)) > 0 AND length(action) <= 2000', name='ck_audit_events_action'),
+        CheckConstraint("result IN ('SUCCESS','REJECTED','FAILED','UNKNOWN')", name='ck_audit_events_result'),
+        CheckConstraint('length(trim(summary)) > 0 AND length(summary) <= 2000', name='ck_audit_events_summary'),
+        CheckConstraint("verified_by = source_module OR (verified_by = 'D' AND actor_type = 'USER')", name='ck_audit_events_verified'),
+        CheckConstraint("jsonb_typeof(input_data::jsonb) = 'object'", name='ck_audit_events_input'),
+        UniqueConstraint('source_module', 'request_id', name='uq_audit_events_source_request'),
+        Index('ix_audit_events_time_id', 'occurred_at', 'audit_id'),
+        Index('ix_audit_events_source_time', 'source_module', 'occurred_at', 'audit_id'),
+        Index('ix_audit_events_business', 'business_id'),
+    )
+
+    audit_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    source_module: Mapped[str] = mapped_column(Text, nullable=False)
+    request_id: Mapped[str] = mapped_column(Text, nullable=False)
+    actor_type: Mapped[str] = mapped_column(Text, nullable=False)
+    actor_user_id: Mapped[str | None] = mapped_column(Text, ForeignKey('users.user_id'), nullable=True, index=True)
+    object_type: Mapped[str] = mapped_column(Text, nullable=False)
+    business_id: Mapped[str] = mapped_column(Text, nullable=False)
+    space_id: Mapped[str | None] = mapped_column(Text, ForeignKey('spaces.space_id'), nullable=True, index=True)
+    action: Mapped[str] = mapped_column(Text, nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    result: Mapped[str] = mapped_column(Text, nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    verified_by: Mapped[str] = mapped_column(Text, nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    input_data: Mapped[dict] = mapped_column(JSON, nullable=False)
