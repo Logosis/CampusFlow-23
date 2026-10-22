@@ -30,6 +30,10 @@ from backend.d.roles import manage_roles as perform_manage_roles
 from backend.d.role_schemas import RoleInput, RoleResult
 
 
+from backend.d.master_maintenance import maintain_master as perform_maintain_master
+from backend.d.master_maintenance_schemas import MaintainMasterInput, MaintainMasterOutput
+
+
 router = APIRouter()
 
 
@@ -123,4 +127,10 @@ def audit(input: AuditInput, request: Request):
 @router.post('/manage_roles', response_model=SuccessResponse[RoleResult], tags=['roles'])
 def manage_roles(input: RoleInput, request: Request):
     return success(perform_manage_roles(input=input, actor_mode=request.state.actor_mode,
+        source_module=request.state.source_module, user_id=request.state.identity['userId']))
+
+
+@router.post('/maintain_master', response_model=SuccessResponse[MaintainMasterOutput], tags=['master'])
+def maintain_master(input: MaintainMasterInput, request: Request):
+    return success(perform_maintain_master(input=input, actor_mode=request.state.actor_mode,
         source_module=request.state.source_module, user_id=request.state.identity['userId']))

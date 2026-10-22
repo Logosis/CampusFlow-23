@@ -333,7 +333,7 @@ def test_permission_storage_failure_is_unavailable_not_a_denial(monkeypatch, kin
 def test_openapi_health_and_output_contract(client):
     health = client.get("/health").json()["data"]
     assert "check_permission" not in health["unfinishedFunctions"]
-    assert "maintain_master" in health["unfinishedFunctions"]
+    assert health["unfinishedFunctions"] == []
     document = client.get("/openapi.json").json()
     assert document["paths"][PATH]["post"]["requestBody"]["required"] is True
     schema = document["components"]["schemas"]["CheckPermissionInput"]

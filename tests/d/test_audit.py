@@ -331,7 +331,7 @@ def test_http_contract_auth_health_and_no_private_fields(client, fixture_data, m
     assert client.post(PATH, json=get(), headers=headers(admin, None)).json() == first
     assert client.post(PATH, json=listing(), headers=headers(admin, None)).json()['data']['items'] == [first['data']]
     health = client.get('/health').json()['data']
-    assert set(health['unfinishedFunctions']) == {'maintain_master'} and health['workerConfigured'] is True
+    assert health['unfinishedFunctions'] == [] and health['workerConfigured'] is True
     schema = client.get('/openapi.json').json()
     assert schema['paths'][PATH]['post']['requestBody']['content']['application/json']['schema']['discriminator']['propertyName'] == 'operation'
     for data, hdr, status, code in [

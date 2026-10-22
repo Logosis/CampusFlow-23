@@ -511,3 +511,25 @@ class RoleRequest(Base):
     response_data: Mapped[dict] = mapped_column(JSON, nullable=False)
     requested_by_user_id: Mapped[str] = mapped_column(Text, ForeignKey('users.user_id'), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class MasterRequest(Base):
+    """(m1, maintain_master, requestId)原输入和结果，与主数据同事务。"""
+    __tablename__ = 'master_requests'
+    __table_args__ = (
+        CheckConstraint('length(trim(request_id)) > 0', name='ck_master_requests_id'),
+        CheckConstraint("jsonb_typeof(input_data::jsonb) = 'object'", name='ck_master_requests_input'),
+        CheckConstraint("jsonb_typeof(response_data::jsonb) = 'object'", name='ck_master_requests_response'),
+    )
+    request_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    input_data: Mapped[dict] = mapped_column(JSON, nullable=False)
+    response_data: Mapped[dict] = mapped_column(JSON, nullable=False)
+    requested_by_user_id: Mapped[str] = mapped_column(Text, ForeignKey('users.user_id'), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class SeatCodeHistory(Base):
+    """永久占号集合；无需指向当前座位或随主记录级联删除。"""
+    __tablename__ = 'seat_code_history'
+    __table_args__ = (CheckConstraint('length(trim(seat_code)) > 0', name='ck_seat_code_history_code'),)
+    seat_code: Mapped[str] = mapped_column(Text, primary_key=True)

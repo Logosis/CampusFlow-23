@@ -359,7 +359,7 @@ def test_http_complete_contract_auth_health_and_all_operations(roles_db, monkeyp
             assert set(result) == {'ok', 'data', 'error'} and result['ok'] is True and result['error'] is None
             assert not any(secret in result['data'] for secret in ('password', 'email', 'account', 'input_data'))
         health = client.get('/health').json()['data']
-        assert health['unfinishedFunctions'] == ['maintain_master'] and health['workerConfigured'] is True
+        assert health['unfinishedFunctions'] == [] and health['workerConfigured'] is True
         schema = client.get('/openapi.json').json()['paths'][PATH]['post']['requestBody']['content']['application/json']['schema']
         assert schema['discriminator']['propertyName'] == 'operation' and len(schema['oneOf']) == 9
         for data, hdr, status, code in [
