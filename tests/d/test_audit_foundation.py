@@ -125,7 +125,7 @@ def test_migration_roundtrip_preserves_all_previous_tables_and_indexes(event_db)
             return {t.name: db.execute(select(t).order_by(*t.primary_key.columns)).all()
                     for t in Base.metadata.sorted_tables if t.name != 'audit_events'}
     before = snapshot()
-    assert len(before) == 15
+    assert len(before) == 16
     migration = ScriptDirectory(str(ROOT / 'backend/d/migrations')).get_revision('d_d34b70ea2c91').module
     with event_db.begin() as db:
         assert re.fullmatch(r'd_seed_test_[0-9a-f]{32}', db.scalar(text('SELECT current_schema()')))

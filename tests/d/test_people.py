@@ -393,7 +393,7 @@ def test_queries_do_not_write_data(people_db):
 def test_health_and_openapi_register_people(client):
     missing = client.get("/health").json()["data"]["unfinishedFunctions"]
     assert not {"login", "get_identity", "logout", "check_permission", "query_master", "query_people"}.intersection(missing)
-    assert "manage_roles" in missing and "maintain_master" in missing
+    assert "manage_roles" not in missing and "maintain_master" in missing
     operation = client.get("/openapi.json").json()["paths"][PATH]["post"]
     body = operation["requestBody"]["content"]["application/json"]["schema"]
     assert body["discriminator"]["propertyName"] == "mode" and len(body["oneOf"]) == 2

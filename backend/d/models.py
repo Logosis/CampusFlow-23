@@ -494,3 +494,20 @@ class AuditEvent(Base):
     verified_by: Mapped[str] = mapped_column(Text, nullable=False)
     recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     input_data: Mapped[dict] = mapped_column(JSON, nullable=False)
+
+
+class RoleRequest(Base):
+    """(m1, manage_roles, requestId)的成功输入和结果，与授权变更同事务保存。"""
+
+    __tablename__ = 'role_requests'
+    __table_args__ = (
+        CheckConstraint('length(trim(request_id)) > 0', name='ck_role_requests_id'),
+        CheckConstraint("jsonb_typeof(input_data::jsonb) = 'object'", name='ck_role_requests_input'),
+        CheckConstraint("jsonb_typeof(response_data::jsonb) = 'object'", name='ck_role_requests_response'),
+    )
+
+    request_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    input_data: Mapped[dict] = mapped_column(JSON, nullable=False)
+    response_data: Mapped[dict] = mapped_column(JSON, nullable=False)
+    requested_by_user_id: Mapped[str] = mapped_column(Text, ForeignKey('users.user_id'), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

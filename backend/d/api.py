@@ -26,6 +26,10 @@ from backend.d.audit import audit as perform_audit
 from backend.d.audit_schemas import AuditInput, AuditOutput
 
 
+from backend.d.roles import manage_roles as perform_manage_roles
+from backend.d.role_schemas import RoleInput, RoleResult
+
+
 router = APIRouter()
 
 
@@ -114,3 +118,9 @@ def audit(input: AuditInput, request: Request):
     mode = request.state.actor_mode
     return success(perform_audit(input=input, actor_mode=mode, source_module=request.state.source_module,
                                 user_id=request.state.identity['userId'] if mode == 'USER' else None))
+
+
+@router.post('/manage_roles', response_model=SuccessResponse[RoleResult], tags=['roles'])
+def manage_roles(input: RoleInput, request: Request):
+    return success(perform_manage_roles(input=input, actor_mode=request.state.actor_mode,
+        source_module=request.state.source_module, user_id=request.state.identity['userId']))

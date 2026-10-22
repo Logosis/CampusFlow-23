@@ -107,7 +107,7 @@ def test_health_and_openapi_register_identity(client):
     health = client.get("/health").json()["data"]
     assert "login" not in health["unfinishedFunctions"]
     assert "get_identity" not in health["unfinishedFunctions"]
-    assert "manage_roles" in health["unfinishedFunctions"]
+    assert "maintain_master" in health["unfinishedFunctions"]
     document = client.get("/openapi.json").json()
     operation = document["paths"][_PATH]["post"]
     assert operation["requestBody"]["required"] is True
