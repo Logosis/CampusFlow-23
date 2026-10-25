@@ -135,7 +135,9 @@ async def get_classroom_options(payload: dict, caller: core.Caller) -> dict:
 
 # --------------------------------------------------------------------- S02
 async def submit_application(payload: dict, caller: core.Caller) -> dict:
-    guard = core.RequestGuard("submit_application", payload["requestId"], payload)
+    await core.require_permission(caller, "m2.application.submit",
+                                  {"type": "SPACE", "id": payload["spaceId"]})
+    guard = core.RequestGuard("submit_application", payload["requestId"], payload, caller.user_id or "")
     with core.session() as db:
         replayed = guard.replay(db)
         if replayed is not None:
@@ -148,8 +150,6 @@ async def submit_application(payload: dict, caller: core.Caller) -> dict:
 
     begin, finish = core.validate_period(payload["startTime"], payload["endTime"])
     purpose = core.require_text(payload["purpose"], "用途")
-    await core.require_permission(caller, "m2.application.submit",
-                                  {"type": "SPACE", "id": payload["spaceId"]})
     space = await core.ensure_space_usable(payload["spaceId"], begin, finish, caller)
 
     with core.session() as db:
@@ -219,7 +219,10 @@ async def get_approval_tasks(payload: dict, caller: core.Caller) -> dict:
 
 # --------------------------------------------------------------------- S04
 async def submit_approval(payload: dict, caller: core.Caller) -> dict:
-    guard = core.RequestGuard("submit_approval", payload["requestId"], payload)
+    with core.session() as db:
+        space_id = core.load_application(db, payload["applicationId"]).space_id
+    await core.require_permission(caller, "m2.approval.approve", {"type": "SPACE", "id": space_id})
+    guard = core.RequestGuard("submit_approval", payload["requestId"], payload, caller.user_id or "")
     with core.session() as db:
         replayed = guard.replay(db)
         if replayed is not None:
@@ -286,7 +289,7 @@ async def submit_approval(payload: dict, caller: core.Caller) -> dict:
     result = await _after_decision(application_id, sync_id, level, reject, last_level,
                                    payload["decision"], caller)
     with core.session() as db:
-        core.RequestGuard("submit_approval", payload["requestId"], payload).store(db, result)
+        guard.store(db, result)
         db.commit()
     return result
 
@@ -428,7 +431,10 @@ async def get_applications(payload: dict, caller: core.Caller) -> dict:
 
 # --------------------------------------------------------------------- S07
 async def cancel_application(payload: dict, caller: core.Caller) -> dict:
-    guard = core.RequestGuard("cancel_application", payload["requestId"], payload)
+    with core.session() as db:
+        space_id = core.load_application(db, payload["applicationId"]).space_id
+    await core.require_permission(caller, "m2.application.cancel", {"type": "SPACE", "id": space_id})
+    guard = core.RequestGuard("cancel_application", payload["requestId"], payload, caller.user_id or "")
     with core.session() as db:
         replayed = guard.replay(db)
         if replayed is not None:
@@ -475,12 +481,12 @@ async def get_approval_config(payload: dict, caller: core.Caller) -> dict:
 
 
 async def update_approval_config(payload: dict, caller: core.Caller) -> dict:
+    await core.require_permission(caller, "m2.config.manage", need_global=True)
     guard = core.RequestGuard("update_approval_config", payload["requestId"], payload)
     with core.session() as db:
         replayed = guard.replay(db)
         if replayed is not None:
             return replayed
-    await core.require_permission(caller, "m2.config.manage", need_global=True)
     scopes = _validate_scopes(payload["applicationScopes"])
     levels = _validate_levels(payload["approvalLevels"])
     await _validate_approvers(levels, scopes, caller)

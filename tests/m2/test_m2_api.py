@@ -156,6 +156,22 @@ def test_config_update_is_idempotent_and_rejects_stale_version(client, world):
     assert update_config(client, dict(body, requestId=new_rid()), expected=409)["code"] == "CONFLICT"
 
 
+def test_successful_config_retry_rechecks_current_permission(client, world):
+    body = good_config(config(client)["version"])
+    update_config(client, body)
+    world.permission_override["u-admin"] = {"m2.config.manage": False}
+    assert update_config(client, body, expected=403)["code"] == "FORBIDDEN"
+
+
+def test_frontend_request_id_is_scoped_to_current_user(client):
+    body = {"spaceId": "sp-school", **slot(), "purpose": "各自独立申请", "requestId": new_rid()}
+    first = call(client, "submit_application", body, account="student1")
+    second = call(client, "submit_application", body, account="student2")
+    assert first["application"]["applicantId"] == "u-student1"
+    assert second["application"]["applicantId"] == "u-student2"
+    assert first["application"]["applicationId"] != second["application"]["applicationId"]
+
+
 # --------------------------------------------------------------------- 提交
 def test_submit_creates_pending_first_level_and_notifies(client, world):
     data = submit(client, purpose="学生会活动")
