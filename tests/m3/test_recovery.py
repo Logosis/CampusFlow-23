@@ -66,22 +66,46 @@ def test_known_rejection_not_retried_and_query_error_does_not_reject(call, peers
     assert detail['seatSync']['status'] == 'UNKNOWN'
 
 
-def test_notification_unknown_only_queried_no_resend_and_audit_retries(call, peers_double, db_factory):
-    peers_double.fail['d', 'send_notification'] = 'TRANSPORT'
+def test_notification_lost_receipt_is_queried_without_resend_and_audit_retries(call, peers_double, db_factory, monkeypatch):
+    import httpx
+    original = peers_double.handler
+    lost = []
+    def accepted_then_lost(request):
+        result = original(request)
+        if request.url.path.endswith('/d/send_notification') and not lost:
+            lost.append(True)
+            raise httpx.ReadTimeout('response lost after actual acceptance', request=request)
+        return result
+    monkeypatch.setattr(peers_double, 'handler', accepted_then_lost)
     peers_double.fail['d', 'audit'] = 'UNAVAILABLE'
     w = assigned(call)
     with db_factory() as s:
         jobs = list(s.scalars(select(Outbox).where(Outbox.kind == 'NOTIFICATION')))
         key = jobs[0].request_id
         assert jobs[0].status == 'UNKNOWN'
-    del peers_double.fail['d', 'send_notification']
     del peers_double.fail['d', 'audit']
     run_jobs()
     assert len([c for c in peers_double.calls if c[1] == 'send_notification' and c[2]['requestId'] == key]) == 1
     assert any(c[1] == 'get_notification' and c[2]['requestId'] == key for c in peers_double.calls)
     with db_factory() as s:
         assert all(j.status == 'SUCCESS' for j in s.scalars(select(Outbox).where(Outbox.kind == 'AUDIT')))
-        assert s.scalar(select(Outbox).where(Outbox.request_id == key)).status == 'UNKNOWN'
+        assert s.scalar(select(Outbox).where(Outbox.request_id == key)).status == 'ACCEPTED'
+
+
+def test_unreceived_notification_replays_same_acceptance_request(call, peers_double, db_factory):
+    peers_double.fail['d', 'send_notification'] = 'TRANSPORT'
+    assigned(call)
+    with db_factory() as session:
+        job = session.scalar(select(Outbox).where(Outbox.kind == 'NOTIFICATION'))
+        key, original = job.request_id, job.payload.copy()
+        assert job.status == 'UNKNOWN'
+    del peers_double.fail['d', 'send_notification']
+    run_jobs()
+    writes = [body for target, fn, body, *_ in peers_double.calls if fn == 'send_notification' and body['requestId'] == key]
+    assert writes == [original, original]
+    assert len(peers_double.notifications) == 1
+    with db_factory() as session:
+        assert session.scalar(select(Outbox).where(Outbox.request_id == key)).status == 'ACCEPTED'
 
 
 def test_malformed_external_result_never_becomes_success(call, peers_double):

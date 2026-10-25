@@ -125,7 +125,14 @@ async def _process(claim):
             _finish(claim, 'SUCCESS', result, result['message'], True)
         elif kind == 'NOTIFICATION':
             if phase == 'query':
-                result = _notification(await peers.peer('d', 'get_notification', {'requestId': payload['requestId']}), payload)
+                try:
+                    result = _notification(await peers.peer('d', 'get_notification', {'requestId': payload['requestId']}), payload)
+                except ApiError as exc:
+                    if exc.code != 'NOT_FOUND':
+                        raise
+                    # 仍可能有原请求在途；仅重放原受理请求，D负责去重，不是新发一封邮件。
+                    phase = 'write'
+                    result = _notification(await peers.peer('d', 'send_notification', payload), payload)
             else:
                 result = _notification(await peers.peer('d', 'send_notification', payload), payload)
             _finish(claim, 'ACCEPTED', result, 'D已受理，投递结果见deliveries', True)
