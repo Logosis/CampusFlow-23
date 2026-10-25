@@ -662,3 +662,23 @@ def test_timeout_and_approval_cannot_both_win(client):
     detail = call(client, "get_application", {"applicationId": app_id}, account=STUDENT)
     assert detail["application"]["status"] == "PENDING"
     assert detail["application"]["currentLevel"] == 2
+
+
+def test_pending_sync_is_recovered_after_interruption_before_dispatch(client, world, monkeypatch):
+    from backend.m2.models import SeatSync
+    app = submit(client)["application"]
+    one = approve(client, app["applicationId"], 1, account=APPROVER1, expected_version=app["version"])
+    async def interrupted_dispatch(application_id, original=None, guard=None):
+        return original
+    with monkeypatch.context() as patch:
+        patch.setattr(service, "_dispatch_application", interrupted_dispatch)
+        two = approve(client, app["applicationId"], 2, account=APPROVER2,
+                      expected_version=one["application"]["version"])
+    assert two["seatSync"]["status"] == "PENDING"
+    original_request = two["seatSync"]["requestId"]
+    monkeypatch.setattr(service, "_last_compensation", float("-inf"))
+    asyncio.run(service._compensate())
+    with session_factory("m2")() as db:
+        row = db.query(SeatSync).filter_by(application_id=app["applicationId"]).one()
+        assert row.status == "SUCCESS" and row.request_id == original_request
+        assert row.attempts == 1

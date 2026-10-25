@@ -685,7 +685,7 @@ async def _compensate() -> None:
         return
     _last_compensation = now
     with core.session() as db:
-        syncs = db.scalars(select(SeatSync).where(SeatSync.status == "UNKNOWN")
+        syncs = db.scalars(select(SeatSync).where(SeatSync.status.in_(["PENDING", "UNKNOWN"]))
                            .limit(10)).all()
         notes = db.scalars(select(NotificationRecord).where(
             NotificationRecord.status.in_(["PENDING", "UNKNOWN"])).limit(10)).all()
