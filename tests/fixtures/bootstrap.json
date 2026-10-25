@@ -80,7 +80,12 @@
         "m3.evaluation.create",
         "m3.repair.manage",
         "m3.work_order.read",
-        "m3.work_order.report"
+        "m3.work_order.report",
+        "m2.application.cancel",
+        "m2.application.read_all",
+        "m3.work_order.cancel",
+        "m3.work_order.read_all",
+        "m3.statistics.read"
       ],
       "scope": {
         "type": "GLOBAL",
@@ -103,7 +108,10 @@
         "m2.application.submit",
         "m2.application.read",
         "m3.work_order.report",
-        "m3.evaluation.create"
+        "m3.evaluation.create",
+        "m2.application.cancel",
+        "m3.work_order.read",
+        "m3.work_order.cancel"
       ],
       "scope": {
         "type": "GLOBAL",
@@ -155,7 +163,8 @@
         "d.notify.send",
         "d.audit.append",
         "d.people.read",
-        "m3.repair.manage"
+        "m3.repair.manage",
+        "m3.work_order.read"
       ],
       "scope": {
         "type": "GLOBAL",

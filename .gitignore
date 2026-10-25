@@ -17,3 +17,7 @@ dist/
 /tmp/
 .DS_Store
 Thumbs.db
+
+# 本模块测试用的本地 SQLite 文件（不入库）
+*.sqlite3
+*.sqlite3-journal
