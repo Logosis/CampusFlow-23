@@ -189,6 +189,31 @@ def test_pending_application_keeps_original_approvers_and_timeout(client):
     assert two["application"]["status"] == "APPROVED"
 
 
+def test_legacy_receipt_replays_only_for_original_user(client):
+    from backend.m2.models import RequestRecord
+    body = {"spaceId": "sp-school", **slot(), "purpose": "旧回执升级", "requestId": new_rid()}
+    first = call(client, "submit_application", body, account="student1")
+    with session_factory("m2")() as db:
+        receipt = db.query(RequestRecord).filter_by(request_id=body["requestId"]).one()
+        receipt.account_key = ""
+        db.commit()
+    assert call(client, "submit_application", body, account="student1") == first
+    second = call(client, "submit_application", body, account="student2")
+    assert second["application"]["applicantId"] == "u-student2"
+    assert second["application"]["applicationId"] != first["application"]["applicationId"]
+
+
+def test_legacy_unknown_receipt_is_not_executed_again(client):
+    from backend.m2.models import RequestRecord
+    body = {"spaceId": "sp-school", **slot(), "purpose": "旧回执未知", "requestId": new_rid()}
+    call(client, "submit_application", body, account="student1")
+    with session_factory("m2")() as db:
+        receipt = db.query(RequestRecord).filter_by(request_id=body["requestId"]).one()
+        receipt.account_key, receipt.result = "", None
+        db.commit()
+    assert call(client, "submit_application", body, account="student1", expected=409)["code"] == "CONFLICT"
+
+
 # --------------------------------------------------------------------- 提交
 def test_submit_creates_pending_first_level_and_notifies(client, world):
     data = submit(client, purpose="学生会活动")

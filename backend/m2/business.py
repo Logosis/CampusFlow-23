@@ -147,13 +147,30 @@ class RequestGuard:
         self.account_key = account_key
 
     def _select(self, db: Session) -> RequestRecord | None:
-        return db.scalars(
+        record = db.scalars(
             select(RequestRecord).where(
                 RequestRecord.function == self.function,
                 RequestRecord.request_id == self.request_id,
                 RequestRecord.account_key == self.account_key,
             )
         ).first()
+        if record is not None or not self.account_key:
+            return record
+        legacy = db.scalar(select(RequestRecord).where(RequestRecord.function == self.function,
+            RequestRecord.request_id == self.request_id, RequestRecord.account_key == ""))
+        if legacy is None:
+            return None
+        if not isinstance(legacy.result, dict):
+            raise ApiError("CONFLICT", "旧版请求结果未确认，需要按原编号核对，不能重新执行")
+        application = legacy.result.get("application") or {}
+        owner = application.get("applicantId")
+        if self.function == "submit_approval":
+            owners = {a.get("approverId") for a in legacy.result.get("approvals", [])
+                      if a.get("applicationVersion") == application.get("version")}
+            owner = next(iter(owners)) if len(owners) == 1 else None
+        if not owner:
+            raise ApiError("CONFLICT", "旧版回执归属无法确认，需要核对后处理")
+        return legacy if owner == self.account_key else None
 
     def replay(self, db: Session) -> dict | None:
         record = self._select(db)
