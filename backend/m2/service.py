@@ -145,7 +145,6 @@ async def submit_application(payload: dict, caller: core.Caller) -> dict:
         row = core.get_config_row(db)
         if not core.config_ready(row):
             raise ApiError("CONFLICT", "整教室预约尚未配置，不能提交申请")
-        config_version = row.version
         db.commit()
 
     begin, finish = core.validate_period(payload["startTime"], payload["endTime"])
@@ -171,7 +170,8 @@ async def submit_application(payload: dict, caller: core.Caller) -> dict:
             status=PENDING,
             current_level=1,
             version=1,
-            config_version=config_version,
+            config_version=row.version,
+            approval_config_snapshot=core.config_view(row),
             submitted_at=submitted,
             current_level_started_at=submitted,
             expires_at=core.compute_expiry(row, submitted, submitted),
@@ -197,17 +197,15 @@ async def _notify(db, application: Application, kind: str, recipients: list[str]
 async def get_approval_tasks(payload: dict, caller: core.Caller) -> dict:
     await core.require_permission(caller, "m2.approval.approve")
     with core.session() as db:
-        row = core.get_config_row(db)
-        my_levels = [int(lv["level"]) for lv in (row.approval_levels or [])
-                     if lv.get("approverId") == caller.user_id]
-        filters = [Application.status == PENDING,
-                   Application.current_level.in_(my_levels or [-1])]
+        filters = [Application.status == PENDING]
         if payload.get("applicationId"):
             filters.append(Application.application_id == payload["applicationId"])
         if payload.get("spaceId"):
             filters.append(Application.space_id == payload["spaceId"])
         rows = db.scalars(select(Application).where(*filters)
                           .order_by(Application.submitted_at.desc(), Application.application_id)).all()
+        rows = [item for item in rows if _level_approver(core.application_config(item),
+                item.current_level or 0) == caller.user_id]
         signature = _signature("tasks", caller.user_id, payload.get("applicationId"),
                                payload.get("spaceId"))
         offset = core.decode_cursor(payload.get("cursor"), signature)
@@ -233,7 +231,7 @@ async def submit_approval(payload: dict, caller: core.Caller) -> dict:
         application = core.load_application(db, payload["applicationId"], lock=True)
         _require_pending(application)
         _check_version(application, payload["expectedVersion"])
-        row = core.get_config_row(db)
+        row = core.application_config(application)
         level = payload["level"]
         if application.current_level != level:
             raise ApiError("CONFLICT", "不是当前审批级别，不能越级审批")
@@ -350,7 +348,7 @@ async def _after_decision(application_id: str, sync_id: int | None, level: int,
     """决定落库后：通知相关方、记审计、回填结果；通知失败不影响业务状态。"""
     with core.session() as db:
         application = core.load_application(db, application_id, lock=True)
-        row = core.get_config_row(db)
+        row = core.application_config(application)
         if reject:
             await _notify(db, application, core.KIND_REJECTED, [application.applicant_id])
         elif last_level:
@@ -491,7 +489,7 @@ async def update_approval_config(payload: dict, caller: core.Caller) -> dict:
     levels = _validate_levels(payload["approvalLevels"])
     await _validate_approvers(levels, scopes, caller)
     with core.session() as db:
-        row = core.get_config_row(db)
+        row = core.get_config_row(db, lock=True)
         if row.version != payload["expectedVersion"]:
             raise ApiError("CONFLICT", "配置版本已变化，请重新查询后再提交")
         guard.claim(db)

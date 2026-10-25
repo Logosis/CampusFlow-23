@@ -172,6 +172,21 @@ def test_frontend_request_id_is_scoped_to_current_user(client):
     assert first["application"]["applicationId"] != second["application"]["applicationId"]
 
 
+def test_pending_application_keeps_original_approvers_and_timeout(client):
+    created = submit(client)["application"]
+    changed = good_config(config(client)["version"])
+    changed["approvalLevels"] = [{"level": 1, "approverId": "u-approver2"},
+                                 {"level": 2, "approverId": "u-admin"}]
+    changed["timeoutSeconds"] = 60
+    update_config(client, changed)
+    tasks = call(client, "get_approval_tasks", {"applicationId": created["applicationId"]}, account=APPROVER1)
+    assert len(tasks["items"]) == 1
+    one = approve(client, created["applicationId"], 1, account=APPROVER1, expected_version=created["version"])
+    assert one["application"]["expiresAt"] == created["expiresAt"]
+    two = approve(client, created["applicationId"], 2, account=APPROVER2, expected_version=one["application"]["version"])
+    assert two["application"]["status"] == "APPROVED"
+
+
 # --------------------------------------------------------------------- 提交
 def test_submit_creates_pending_first_level_and_notifies(client, world):
     data = submit(client, purpose="学生会活动")

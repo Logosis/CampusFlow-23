@@ -62,6 +62,7 @@ class Application(Base):
     current_level: Mapped[int | None] = mapped_column(Integer)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     config_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    approval_config_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     current_level_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

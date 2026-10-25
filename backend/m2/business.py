@@ -187,8 +187,8 @@ class RequestGuard:
 
 
 # --------------------------------------------------------------------- 配置
-def get_config_row(db: Session) -> ApprovalConfig:
-    row = db.get(ApprovalConfig, 1)
+def get_config_row(db: Session, *, lock: bool = False) -> ApprovalConfig:
+    row = db.scalar(select(ApprovalConfig).where(ApprovalConfig.id == 1).with_for_update()) if lock else db.get(ApprovalConfig, 1)
     if row is None:
         row = ApprovalConfig(
             id=1, version=1, application_scopes=[], approval_levels=[],
@@ -197,6 +197,17 @@ def get_config_row(db: Session) -> ApprovalConfig:
         db.add(row)
         db.flush()
     return row
+
+
+def application_config(application: Application):
+    """在途规则只取提交快照；旧数据无法恢复原规则时拒绝猜测。"""
+    from types import SimpleNamespace
+    value = application.approval_config_snapshot
+    if not isinstance(value, dict) or value.get("version") != application.config_version:
+        raise ApiError("UNAVAILABLE", "原申请审批规则快照缺失，需要核对历史配置")
+    return SimpleNamespace(approval_levels=value["approvalLevels"],
+        application_scopes=value["applicationScopes"], clock_start=value["clockStart"],
+        timeout_seconds=value["timeoutSeconds"], check_interval_seconds=value["checkIntervalSeconds"])
 
 
 def config_view(row: ApprovalConfig) -> dict:
