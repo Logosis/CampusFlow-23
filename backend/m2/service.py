@@ -92,12 +92,21 @@ async def get_allowed_actions(payload: dict, caller: core.Caller) -> dict:
     with core.session() as db:
         row = core.get_config_row(db)
         approve = any(lv.get("approverId") == caller.user_id for lv in (row.approval_levels or []))
+        pending = select(Application).where(Application.status == PENDING)
+        if payload.get("spaceId"):
+            pending = pending.where(Application.space_id == payload["spaceId"])
+        for application in db.scalars(pending):
+            snapshot = application.approval_config_snapshot or {}
+            approve = approve or any(level.get("level") == application.current_level
+                and level.get("approverId") == caller.user_id for level in snapshot.get("approvalLevels", []))
         db.commit()
+    decision = await core.permission_state(caller, "m2.approval.approve", space_scope)
+    approve = approve and bool(decision.get("allowed"))
     actions.append({
         "operation": "APPROVE",
         "allowed": approve,
-        "allowedScopes": [],
-        "reason": "" if approve else "当前配置中没有本人负责的审批级别",
+        "allowedScopes": decision.get("allowedScopes", []) if approve else [],
+        "reason": "" if approve else "没有审批权限或当前负责的审批任务",
     })
     order = ["SUBMIT", "APPROVE", "READ", "CONFIGURE", "CANCEL", "MANAGED_READ"]
     actions.sort(key=lambda item: order.index(item["operation"]))

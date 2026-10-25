@@ -256,6 +256,8 @@ def test_pending_approval_keeps_rules_after_real_admin_config_change():
     try:
         change(original | {"approvalLevels": [{"level": 1, "approverId": "u-approver2"},
                            {"level": 2, "approverId": "u-admin"}], "timeoutSeconds": 60})
+        actions = call("m2", "get_allowed_actions", {}, first)["actions"]
+        assert next(a for a in actions if a["operation"] == "APPROVE")["allowed"]
         tasks = call("m2", "get_approval_tasks", {"applicationId": app["applicationId"]}, first)
         assert len(tasks["items"]) == 1
         one = call("m2", "submit_approval", {"applicationId": app["applicationId"], "level": 1,

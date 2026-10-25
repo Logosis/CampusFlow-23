@@ -179,6 +179,8 @@ def test_pending_application_keeps_original_approvers_and_timeout(client):
                                  {"level": 2, "approverId": "u-admin"}]
     changed["timeoutSeconds"] = 60
     update_config(client, changed)
+    actions = call(client, "get_allowed_actions", {}, account=APPROVER1)["actions"]
+    assert next(a for a in actions if a["operation"] == "APPROVE")["allowed"]
     tasks = call(client, "get_approval_tasks", {"applicationId": created["applicationId"]}, account=APPROVER1)
     assert len(tasks["items"]) == 1
     one = approve(client, created["applicationId"], 1, account=APPROVER1, expected_version=created["version"])
