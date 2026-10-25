@@ -15,13 +15,8 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE = json.loads((ROOT / "tests/fixtures/bootstrap.json").read_text(encoding="utf-8"))
 
-# 必须在导入 backend 之前设定：Settings.load 从环境变量读取
-_DB_PATH = ROOT / ".m2_test.sqlite3"
-os.environ["APP_ENV"] = "test"
-os.environ["M2_DATABASE_URL"] = f"sqlite+pysqlite:///{_DB_PATH.as_posix()}"
-os.environ.setdefault("SERVICE_CREDENTIAL_M2", "secret-m2")
-os.environ.setdefault("D_BASE_URL", "http://d.test")
-os.environ.setdefault("M1_BASE_URL", "http://m1.test")
+# 仅在M2测试会话内设置环境；每轮独立数据库，不污染全量收集或其他测试进程。
+_DB_PATH = None
 
 from fastapi.testclient import TestClient  # noqa: E402
 
@@ -213,18 +208,22 @@ def world(monkeypatch) -> FakeWorld:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def database():
+def database(tmp_path_factory):
     """独立 SQLite 测试库：只建本模块表。"""
-    if _DB_PATH.exists():
-        _DB_PATH.unlink()
-    engine = session_factory("m2").kw["bind"]
-    Base.metadata.create_all(engine)
-    yield
-    engine.dispose()
-    try:
-        _DB_PATH.unlink()
-    except OSError:
-        pass
+    global _DB_PATH
+    _DB_PATH = tmp_path_factory.mktemp("m2-database") / "m2.sqlite3"
+    with pytest.MonkeyPatch.context() as patch:
+        patch.delenv("DATABASE_URL", raising=False)
+        patch.setenv("APP_ENV", "test")
+        patch.setenv("M2_DATABASE_URL", f"sqlite+pysqlite:///{_DB_PATH.as_posix()}")
+        session_factory.cache_clear()
+        engine = session_factory("m2").kw["bind"]
+        Base.metadata.create_all(engine)
+        try:
+            yield
+        finally:
+            engine.dispose()
+            session_factory.cache_clear()
 
 
 @pytest.fixture()
