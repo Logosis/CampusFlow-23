@@ -1,5 +1,7 @@
-"""真实HTTP集成验收；当前业务尚未实现，这些测试应失败，不得用模拟服务冒充通过。"""
+"""真实HTTP集成验收；只在全新隔离测试库运行，不得用模拟服务冒充通过。"""
 import json
+import subprocess
+import sys
 import time
 from pathlib import Path
 from datetime import timedelta
@@ -146,3 +148,121 @@ def test_release_tombstone_rejects_late_request_and_untrusted_source():
          "sourceVersion": 3, "requestId": rid()}, source="m3", expected=409)
     assert call("m1", "get_room_limit", {"source": "M3", "businessId": business}, source="m3")["currentLimit"]["state"] == "RELEASED"
     call("m1", "change_room_limit", request | {"requestId": rid()}, source="m2", expected=403)
+
+
+def audits(admin, source, business_id):
+    return call("d", "audit", {"operation": "LIST", "sourceModule": source,
+                "businessId": business_id, "limit": 100}, admin)["items"]
+
+
+def has_event(action, actor_id):
+    def check(events):
+        assert any(event["action"] == action and event["actorId"] == actor_id for event in events)
+    return check
+
+
+def test_m2_cancel_query_audit_and_real_email():
+    student, admin = login("student1"), login("admin")
+    purpose = "集成撤销验收-" + rid()
+    submitted = call("m2", "submit_application", {"spaceId": "sp-school", **slot(8),
+                     "purpose": purpose, "requestId": rid()}, student)
+    app = submitted["application"]
+    body = {"applicationId": app["applicationId"], "expectedVersion": app["version"], "requestId": rid()}
+    cancelled = call("m2", "cancel_application", body, student)
+    assert cancelled["application"]["status"] == "CANCELLED"
+    assert call("m2", "cancel_application", body, student) == cancelled
+    eventually(lambda: call("m2", "get_application", {"applicationId": app["applicationId"]}, student), sync_success)
+    for view, token in [("OWN", student), ("MANAGED", admin)]:
+        page = call("m2", "get_applications", {"view": view, "applicationId": app["applicationId"]}, token)
+        assert len(page["items"]) == 1 and page["items"][0]["application"]["status"] == "CANCELLED"
+    eventually(lambda: audits(admin, "M2", app["applicationId"]), has_event("CANCEL_APPLICATION", "u-student1"))
+    notification = next(n["notification"] for n in cancelled["notifications"]
+                        if n["notification"] and n["notification"]["kind"] == "M2_CANCELLED")
+    def delivered(result):
+        assert result["deliveries"] and all(d["status"] == "SUBMITTED" for d in result["deliveries"])
+    eventually(lambda: call("d", "get_notification", {"notificationId": notification["notificationId"]}, admin), delivered)
+    from dotenv import load_dotenv
+    import os
+    load_dotenv(ROOT / ".env", override=False)
+    mailpit = os.environ.get("MAILPIT_BASE_URL")
+    assert mailpit, "真实邮件验收需要隔离Mailpit"
+    messages = httpx.get(mailpit + "/api/v1/messages", trust_env=False, timeout=5).json()["messages"]
+    matching = [m for m in messages if m["Subject"] == notification["title"]]
+    assert any(purpose in httpx.get(mailpit + "/api/v1/message/" + m["ID"], trust_env=False, timeout=5).json()["Text"]
+               for m in matching), "Mailpit未收到对应业务邮件"
+
+
+def test_m3_cancel_query_progress_and_statistics_with_initial_roles():
+    student, admin = login("student1"), login("admin")
+    start = utc_now()
+    reported = call("m3", "report_fault", {"spaceId": "sp-school", "faultLocation": "走廊",
+                    "description": "集成维修前取消", "requestId": rid()}, student)
+    work = reported["workOrder"]
+    result = call("m3", "cancel_work_order", {"workOrderId": work["workOrderId"],
+                  "expectedVersion": work["version"], "requestId": rid()}, student)
+    assert result["workOrder"]["status"] == "CANCELLED"
+    detail = call("m3", "get_work_order", {"workOrderId": work["workOrderId"]}, student)
+    assert [event["type"] for event in detail["timeline"]] == ["REPORT", "CANCEL"]
+    page = call("m3", "get_work_orders", {"view": "OWN", "status": "CANCELLED"}, student)
+    assert any(w["workOrderId"] == work["workOrderId"] for w in page["items"])
+    stats = call("m3", "get_maintenance_stats", {"startTime": format_time(start),
+                 "endTime": format_time(start + timedelta(seconds=1))}, admin)
+    assert stats["statusCounts"]["CANCELLED"] >= 1
+    call("m3", "get_maintenance_stats", {"startTime": format_time(start),
+         "endTime": format_time(start + timedelta(seconds=1))}, student, expected=403)
+    eventually(lambda: audits(admin, "M3", work["workOrderId"]), has_event("CANCEL", "u-student1"))
+
+
+def test_real_timeout_config_and_system_audits():
+    admin, student = login("admin"), login("student1")
+    originals = {owner: call("m1", "get_config", {"owner": owner}, admin)["config"] for owner in ("M2", "M3")}
+    def update(owner, config):
+        current = call("m1", "get_config", {"owner": owner}, admin)["config"]
+        fields = {k: v for k, v in config.items() if k != "version"}
+        return call("m1", "update_config", {"owner": owner, "config": fields,
+                    "expectedVersion": current["version"], "requestId": rid()}, admin)
+    try:
+        update("M2", originals["M2"] | {"timeoutSeconds": 10, "checkIntervalSeconds": 1})
+        update("M3", originals["M3"] | {"checkIntervalSeconds": 1,
+               "rules": [r | {"timeoutSeconds": 10} for r in originals["M3"]["rules"]]})
+        app = call("m2", "submit_application", {"spaceId": "sp-school", **slot(9),
+                   "purpose": "集成超时撤销", "requestId": rid()}, student)["application"]
+        work = call("m3", "report_fault", {"spaceId": "sp-school", "faultLocation": "讲台",
+                    "description": "集成超时升级", "requestId": rid()}, student)["workOrder"]
+        subprocess.run([sys.executable, "scripts/clock.py", "advance", "--seconds", "15"], cwd=ROOT, check=True)
+        def timed_out(result):
+            assert result["application"]["status"] == "TIMEOUT_CANCELLED"
+            sync_success(result)
+        eventually(lambda: call("m2", "get_application", {"applicationId": app["applicationId"]}, student), timed_out)
+        eventually(lambda: audits(admin, "M2", app["applicationId"]), has_event("TIMEOUT_CANCEL", "M2"))
+        def escalated(detail):
+            assert len(detail["detail"]["escalations"]) == 1
+        eventually(lambda: call("m3", "get_work_order", {"workOrderId": work["workOrderId"]}, admin), escalated)
+        eventually(lambda: audits(admin, "M3", work["workOrderId"]), has_event("ESCALATE", "M3"))
+    finally:
+        for owner, config in originals.items():
+            update(owner, config)
+
+
+def test_pending_approval_keeps_rules_after_real_admin_config_change():
+    admin, student, first, last = [login(x) for x in ("admin", "student1", "approver1", "approver2")]
+    original = call("m1", "get_config", {"owner": "M2"}, admin)["config"]
+    app = call("m2", "submit_application", {"spaceId": "sp-school", **slot(10),
+               "purpose": "配置变更保留在途规则", "requestId": rid()}, student)["application"]
+    def change(config):
+        version = call("m1", "get_config", {"owner": "M2"}, admin)["config"]["version"]
+        return call("m1", "update_config", {"owner": "M2", "config": {k: v for k, v in config.items() if k != "version"},
+                    "expectedVersion": version, "requestId": rid()}, admin)
+    try:
+        change(original | {"approvalLevels": [{"level": 1, "approverId": "u-approver2"},
+                           {"level": 2, "approverId": "u-admin"}], "timeoutSeconds": 60})
+        tasks = call("m2", "get_approval_tasks", {"applicationId": app["applicationId"]}, first)
+        assert len(tasks["items"]) == 1
+        one = call("m2", "submit_approval", {"applicationId": app["applicationId"], "level": 1,
+                   "decision": "APPROVE", "expectedVersion": app["version"], "requestId": rid()}, first)
+        two = call("m2", "submit_approval", {"applicationId": app["applicationId"], "level": 2,
+                   "decision": "APPROVE", "expectedVersion": one["application"]["version"], "requestId": rid()}, last)
+        assert two["application"]["status"] == "APPROVED"
+        sync_success(two)
+    finally:
+        change(original)
