@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>CampusFlow · 教室签到屏</title>
+  <style>
+    html,body{height:100%;margin:0} body{display:grid;place-items:center;background:#061b2b;color:#eefaff;font-family:Inter,"Microsoft YaHei",sans-serif}
+    main{text-align:center;width:min(880px,90vw)} h1{font-size:clamp(28px,5vw,64px);margin:0 0 18px}.token{font:700 clamp(28px,6vw,72px)/1.1 ui-monospace,monospace;letter-spacing:.08em;padding:32px;border:2px solid #5eead4;border-radius:22px;background:#0f2d3b;word-break:break-all}.meta{margin-top:18px;color:#a9c6d3;font-size:clamp(14px,2vw,22px)} form{display:flex;justify-content:center;gap:10px;margin-bottom:24px}input,button{font:inherit;padding:11px 14px;border-radius:10px;border:1px solid #557284}button{background:#14b8a6;color:#05211f;border:0;font-weight:700}#error{color:#fecaca;margin-top:14px}
+  </style>
+</head>
+<body><main>
+  <h1>教室签到动态码</h1>
+  <form id="room-form"><input name="spaceId" placeholder="教室编号" required><button>显示</button></form>
+  <div id="token" class="token">—</div><div id="meta" class="meta">请输入本屏幕账号授权范围内的教室编号</div><div id="error"></div>
+</main>
+<script type="module">
+  import { api, getCredential } from "../shared/auth.js";
+  if(!getCredential()) location.replace("/login.html");
+  let current=null;
+  async function refresh(){ if(!current)return; try{const data=await api("m1","get_check_in_code",{spaceId:current}); document.querySelector("#token").textContent=data.token; document.querySelector("#meta").textContent=`${data.spaceId} · 校园日期 ${data.date} · ${new Date(data.expiresAt).toLocaleString()} 失效`; document.querySelector("#error").textContent="";}catch(error){document.querySelector("#error").textContent=`${error.code||"UNAVAILABLE"}: ${error.message}`;}}
+  document.querySelector("#room-form").addEventListener("submit",event=>{event.preventDefault();current=new FormData(event.currentTarget).get("spaceId").trim();refresh();});
+  setInterval(refresh,60000);
+</script></body></html>
