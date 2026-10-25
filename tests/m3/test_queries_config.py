@@ -12,6 +12,9 @@ from tests.m3.test_report_dispatch import report
 def test_read_views_detail_redaction_and_scope(call, peers_double):
     peers_double.grant('student1', 'm3.work_order.read')
     peers_double.grant('student2', 'm3.work_order.read')
+    # 本用例测试局部授权；先移除新共同初始化中的管理员全局查询授权。
+    peers_double.grants['admin'] = [g for g in peers_double.grants['admin']
+                                   if g['permissionCode'] != 'm3.work_order.read_all']
     peers_double.grant('admin', 'm3.work_order.read_all', {'type': 'SPACE', 'id': 'sp-school'})
     w = assigned(call)
     own = call('get_work_orders', {'view': 'OWN'})

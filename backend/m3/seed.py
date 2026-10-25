@@ -12,7 +12,7 @@ from backend.shared.settings import Settings
 async def seed_async():
     if Settings.load('m3').app_env != 'test':
         raise ApiError('FORBIDDEN', '共同测试初始化仅允许test环境')
-    fixture = json.loads((Path(__file__).resolve().parents[2] / 'tests/fixtures/bootstrap.json').read_text())
+    fixture = json.loads((Path(__file__).resolve().parents[2] / 'tests/fixtures/bootstrap.json').read_text(encoding='utf-8'))
     cfg = ConfigOutput.model_validate(fixture['m3']).model_dump()
     for expected in fixture['spaces']:
         actual = await peers.get_space(expected['spaceId'])

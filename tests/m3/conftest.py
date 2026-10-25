@@ -15,7 +15,7 @@ from backend.shared import client as shared_client, clock
 from backend.shared.errors import STATUS
 from backend.shared.settings import Settings
 
-FIXTURE = json.loads((Path(__file__).resolve().parents[1] / 'fixtures/bootstrap.json').read_text())
+FIXTURE = json.loads((Path(__file__).resolve().parents[1] / 'fixtures/bootstrap.json').read_text(encoding='utf-8'))
 
 
 class PeerDouble:
@@ -109,6 +109,8 @@ class PeerDouble:
                 return self.ok(self.notifications[body['requestId']]) if body['requestId'] in self.notifications else self.error('NOT_FOUND')
             if fn == 'audit':
                 if body['operation'] == 'APPEND':
+                    from backend.d.audit_schemas import AuditAppendInput
+                    AuditAppendInput.model_validate(body)
                     self.audits.setdefault(body['requestId'], body | {'auditId': 'a-' + body['requestId'], 'verifiedBy': 'M3'})
                 return self.ok(self.audits[body['requestId']]) if body['requestId'] in self.audits else self.error('NOT_FOUND')
         if target == 'm1':
