@@ -418,7 +418,6 @@ async def queue_notification(db: Session, application: Application, kind: str,
     )
     db.add(record)
     db.flush()
-    await deliver_notification(db, record, application)
     return record
 
 
@@ -484,7 +483,6 @@ async def queue_audit(db: Session, action: str, application: Application | None,
     record = AuditRecord(request_id=payload["requestId"], payload=payload, status="PENDING")
     db.add(record)
     db.flush()
-    await flush_audit(record)
 
 
 async def flush_audit(record: AuditRecord) -> None:

@@ -82,6 +82,21 @@ def test_health_reports_all_functions_and_worker(client):
     assert data["workerError"] is False
 
 
+def test_background_failure_is_not_swallowed(monkeypatch):
+    phases = []
+    async def timeout_failure():
+        phases.append("timeout")
+        raise RuntimeError("isolated worker failure")
+    async def compensate():
+        phases.append("compensate")
+    monkeypatch.setattr(service, "_timeout_scan", timeout_failure)
+    monkeypatch.setattr(service, "_compensate", compensate)
+    with pytest.raises(ApiError) as caught:
+        asyncio.run(service.tick())
+    assert caught.value.code == "UNAVAILABLE"
+    assert phases == ["timeout", "compensate"]
+
+
 def test_s08_is_open_to_user_but_requires_login(client):
     # 共同规则把 S08 登记为可直连的管理入口；登录与权限仍由 D-S04 核验
     data = config(client)
@@ -437,6 +452,30 @@ def test_notification_and_audit_failure_do_not_drop_business_state(client, world
                   account=STUDENT)
     assert detail["application"]["status"] == "PENDING"
     assert detail["notifications"][0]["status"] == "UNKNOWN"
+
+
+@pytest.mark.parametrize("kind", ["notification", "audit"])
+def test_transient_outage_does_not_permanently_exhaust_acceptance_retries(client, world, kind):
+    from backend.m2.models import NotificationRecord, AuditRecord
+    world.notification_error = world.audit_error = True
+    data = submit(client)
+    model = NotificationRecord if kind == "notification" else AuditRecord
+    with session_factory("m2")() as db:
+        application_id = data["application"]["applicationId"]
+        query = db.query(model)
+        query = query.filter_by(application_id=application_id) if kind == "notification" else query.filter(model.payload["businessId"].as_string() == application_id)
+        row = query.one()
+        row.attempts = 5
+        ident = row.id
+        original_request = row.request_id
+        db.commit()
+    world.notification_error = world.audit_error = False
+    retry = service._retry_notification if kind == "notification" else service._retry_audit
+    asyncio.run(retry(ident))
+    with session_factory("m2")() as db:
+        row = db.get(model, ident)
+        assert row.status == ("ACCEPTED" if kind == "notification" else "SUCCESS")
+        assert row.request_id == original_request and row.attempts == 6
 
 
 # --------------------------------------------------------------------- 查询

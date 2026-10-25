@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import logging
 import time
 from hashlib import sha256
 
@@ -18,8 +19,9 @@ from backend.m2 import peers
 from backend.m2.models import Application, Approval, ApprovalConfig, AuditRecord, NotificationRecord, SeatSync
 
 PENDING = "PENDING"
-MAX_DELIVERY_ATTEMPTS = 5
 COMPENSATION_SECONDS = 5
+logger = logging.getLogger(__name__)
+_last_compensation = float("-inf")
 
 
 # --------------------------------------------------------------------- 小工具
@@ -193,7 +195,7 @@ async def submit_application(payload: dict, caller: core.Caller) -> dict:
         result = core.application_view(db, application)
         guard.store(db, result)
         db.commit()
-    return result
+    return await _dispatch_application(application.application_id, result, guard)
 
 
 async def _notify(db, application: Application, kind: str, recipients: list[str]) -> None:
@@ -234,8 +236,14 @@ async def submit_approval(payload: dict, caller: core.Caller) -> dict:
         replayed = guard.replay(db)
         if replayed is not None:
             return replayed
+        pending = core.load_application(db, payload["applicationId"])
+        _require_pending(pending)
+        _check_version(pending, payload["expectedVersion"])
+        approver = _level_approver(core.application_config(pending), payload["level"])
+        if caller.user_id != approver:
+            raise ApiError("FORBIDDEN", "不是本申请当前级别的审批人")
+    await _verify_approver(approver, pending, caller)
 
-    sync_id: int | None = None
     with core.session() as db:
         application = core.load_application(db, payload["applicationId"], lock=True)
         _require_pending(application)
@@ -249,9 +257,6 @@ async def submit_approval(payload: dict, caller: core.Caller) -> dict:
             raise ApiError("CONFLICT", "审批配置缺少当前级别")
         if caller.user_id != expected_approver:
             raise ApiError("FORBIDDEN", "不是本申请当前级别的审批人")
-        await core.require_permission(caller, "m2.approval.approve",
-                                      {"type": "SPACE", "id": application.space_id})
-        await _verify_approver(expected_approver, application, caller)
         guard.claim(db)
         comment = core.require_text(payload.get("comment"), "审批意见", allow_empty=True)
 
@@ -288,17 +293,21 @@ async def submit_approval(payload: dict, caller: core.Caller) -> dict:
                             status="PENDING", handling=True, message="", attempts=0)
             db.add(sync)
             db.flush()
-            sync_id = sync.id
-            await _apply_sync(db, application, sync)
+        if reject:
+            await _notify(db, application, core.KIND_REJECTED, [application.applicant_id])
+        elif last_level:
+            await _notify(db, application, core.KIND_APPROVED, [application.applicant_id])
+        else:
+            nxt = _level_approver(row, level + 1)
+            if nxt:
+                await _notify(db, application, core.KIND_PENDING, [nxt])
+        await core.queue_audit(db, "SUBMIT_APPROVAL", application, "SUCCESS",
+                               f"第{level}级审批 {payload['decision']}", actor_id=caller.user_id)
         application_id = application.application_id
-        db.commit()
-
-    result = await _after_decision(application_id, sync_id, level, reject, last_level,
-                                   payload["decision"], caller)
-    with core.session() as db:
+        result = core.application_view(db, application)
         guard.store(db, result)
         db.commit()
-    return result
+    return await _dispatch_application(application_id, result, guard)
 
 
 async def _verify_approver(approver_id: str, application: Application, caller: core.Caller) -> None:
@@ -352,25 +361,36 @@ async def _apply_sync(db, application: Application, sync: SeatSync) -> None:
     db.flush()
 
 
-async def _after_decision(application_id: str, sync_id: int | None, level: int,
-                          reject: bool, last_level: bool, decision: str, caller: core.Caller) -> dict:
-    """决定落库后：通知相关方、记审计、回填结果；通知失败不影响业务状态。"""
+async def _dispatch_application(application_id: str, original: dict | None = None,
+                                guard: core.RequestGuard | None = None) -> dict | None:
+    """业务及待办已提交后再访问外部服务，不在持有申请行锁时等待网络。"""
     with core.session() as db:
-        application = core.load_application(db, application_id, lock=True)
-        row = core.application_config(application)
-        if reject:
-            await _notify(db, application, core.KIND_REJECTED, [application.applicant_id])
-        elif last_level:
-            await _notify(db, application, core.KIND_APPROVED, [application.applicant_id])
-        else:
-            nxt = _level_approver(row, level + 1)
-            if nxt:
-                await _notify(db, application, core.KIND_PENDING, [nxt])
-        await core.queue_audit(db, "SUBMIT_APPROVAL", application, "SUCCESS",
-                               f"第{level}级审批 {decision}", actor_id=caller.user_id)
-        result = core.application_view(db, application)
+        syncs = list(db.scalars(select(SeatSync.id).where(SeatSync.application_id == application_id,
+            SeatSync.status.in_(["PENDING", "UNKNOWN"]))))
+        notes = list(db.scalars(select(NotificationRecord.id).where(NotificationRecord.application_id == application_id,
+            NotificationRecord.status.in_(["PENDING", "UNKNOWN"]))))
+        audits = list(db.scalars(select(AuditRecord.id).where(AuditRecord.payload["businessId"].as_string() == application_id,
+            AuditRecord.status.in_(["PENDING", "UNKNOWN"]))))
+    for ident in syncs:
+        await _retry_sync(ident)
+    for ident in notes:
+        await _retry_notification(ident)
+    for ident in audits:
+        await _retry_audit(ident)
+    if original is None:
+        return None
+    with core.session() as db:
+        current = core.application_view(db, core.load_application(db, application_id))
+        # 原操作的业务版本和审批记录不被后续操作替换，仅更新原请求的投递回执。
+        if original["seatSync"] is not None and current["seatSync"] is not None:
+            if original["seatSync"]["requestId"] == current["seatSync"]["requestId"]:
+                original["seatSync"] = current["seatSync"]
+        notes = {n["requestId"]: n for n in current["notifications"]}
+        original["notifications"] = [notes.get(n["requestId"], n) for n in original["notifications"]]
+        if guard is not None:
+            guard.store(db, original)
         db.commit()
-    return result
+    return original
 
 
 # --------------------------------------------------------------------- S05 / S06
@@ -453,8 +473,6 @@ async def cancel_application(payload: dict, caller: core.Caller) -> dict:
             raise ApiError("FORBIDDEN", "只能撤销本人的申请")
         _require_pending(application)
         _check_version(application, payload["expectedVersion"])
-        await core.require_permission(caller, "m2.application.cancel",
-                                      {"type": "SPACE", "id": application.space_id})
         guard.claim(db)
         application.status = "CANCELLED"
         application.current_level = None
@@ -467,14 +485,13 @@ async def cancel_application(payload: dict, caller: core.Caller) -> dict:
                         status="PENDING", handling=True, message="", attempts=0)
         db.add(sync)
         db.flush()
-        await _apply_sync(db, application, sync)
         await _notify(db, application, core.KIND_CANCELLED, [application.applicant_id])
         await core.queue_audit(db, "CANCEL_APPLICATION", application, "SUCCESS", "申请人主动撤销",
                                actor_id=caller.user_id)
         result = core.application_view(db, application)
         guard.store(db, result)
         db.commit()
-    return result
+    return await _dispatch_application(application.application_id, result, guard)
 
 
 # --------------------------------------------------------------------- S08
@@ -597,19 +614,16 @@ async def get_maintenance_impact(payload: dict, caller: core.Caller) -> dict:
 
 # --------------------------------------------------------------------- 后台任务
 async def tick() -> None:
-    """定时入口：超时终结与补偿。单轮失败不外抛，避免整站健康状态被误报。"""
-    started = time.monotonic()
-    try:
-        await _timeout_scan()
-    except Exception:  # noqa: BLE001 - 记录后继续下一轮
-        pass
-    try:
-        await _compensate()
-    except Exception:  # noqa: BLE001
-        pass
-    elapsed = time.monotonic() - started
-    if elapsed > 30:  # 慢轮次不累积，交由下一轮
-        return
+    """两阶段均尝试；未完成轮次交由共同worker保留健康错误并在下一轮重试。"""
+    failed = False
+    for phase, run in (("timeout_scan", _timeout_scan), ("compensate", _compensate)):
+        try:
+            await run()
+        except Exception as exc:
+            failed = True
+            logger.error("M2 tick phase=%s failed type=%s", phase, type(exc).__name__)
+    if failed:
+        raise ApiError("UNAVAILABLE", "M2后台轮次未完成，请检查超时扫描与补偿")
 
 
 async def _timeout_scan() -> None:
@@ -657,14 +671,19 @@ async def _expire(application_id: str) -> None:
                         status="PENDING", handling=True, message="", attempts=0)
         db.add(sync)
         db.flush()
-        await _apply_sync(db, application, sync)
         await _notify(db, application, core.KIND_TIMEOUT, [application.applicant_id])
         await core.queue_audit(db, "TIMEOUT_CANCEL", application, "SUCCESS", "待审批超时自动撤销")
         db.commit()
+    await _dispatch_application(application_id)
 
 
 async def _compensate() -> None:
     """补偿未确认的写回、通知与审计；不换编号，未确认就不冒充成功。"""
+    global _last_compensation
+    now = time.monotonic()
+    if now - _last_compensation < COMPENSATION_SECONDS:
+        return
+    _last_compensation = now
     with core.session() as db:
         syncs = db.scalars(select(SeatSync).where(SeatSync.status == "UNKNOWN")
                            .limit(10)).all()
@@ -696,11 +715,6 @@ async def _retry_sync(sync_id: int) -> None:
             if verified:
                 db.commit()
                 return
-        if sync.attempts >= MAX_DELIVERY_ATTEMPTS:
-            sync.handling = False
-            sync.message = sync.message or "重试次数已用完，需人工核实"
-            db.commit()
-            return
         await _apply_sync(db, application, sync)
         db.commit()
 
@@ -732,9 +746,6 @@ async def _retry_notification(note_id: int) -> None:
         if record is None or record.status not in {"PENDING", "UNKNOWN"}:
             db.rollback()
             return
-        if record.attempts >= MAX_DELIVERY_ATTEMPTS:
-            db.commit()
-            return
         application = core.load_application(db, record.application_id)
         await core.deliver_notification(db, record, application)
         db.commit()
@@ -745,9 +756,6 @@ async def _retry_audit(audit_id: int) -> None:
         record = db.get(AuditRecord, audit_id)
         if record is None or record.status not in {"PENDING", "UNKNOWN"}:
             db.rollback()
-            return
-        if record.attempts >= MAX_DELIVERY_ATTEMPTS:
-            db.commit()
             return
         await core.flush_audit(record)
         db.commit()
