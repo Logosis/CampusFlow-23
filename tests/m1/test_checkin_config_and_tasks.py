@@ -1,4 +1,5 @@
 import asyncio
+import pytest
 from pathlib import Path
 from uuid import uuid4
 
@@ -11,6 +12,37 @@ from backend.shared.db import session_factory
 from backend.shared.errors import ApiError
 from backend.shared.registry import SERVICES
 from tests.m1.test_reservation_and_limits import call, period
+
+
+@pytest.mark.parametrize("failure", ["UNAVAILABLE", "INTERNAL_ERROR"])
+def test_unreceived_notification_recovers_with_original_request(m1_client, monkeypatch, failure):
+    from backend.m1.outbox import notification
+    from backend.shared.clock import utc_now
+    calls, received = [], {}
+    async def peer(settings, target, function, payload, actor):
+        calls.append((function, payload.copy()))
+        if function == "get_notification":
+            raise ApiError("NOT_FOUND", "原受理暂不可见")
+        if len([c for c in calls if c[0] == "send_notification"]) == 1:
+            raise ApiError(failure, "首个受理请求结果未知")
+        received.setdefault(payload["requestId"], payload)
+        return {"notificationId": "received"}
+    monkeypatch.setattr("backend.m1.tasks.call_peer", peer)
+    with session_factory("m1")() as db:
+        notification(db, "recover-original", "reservation", "sp-school", "u-student1",
+                     "M1_BEFORE_START", "提醒", "内容", utc_now())
+        db.commit()
+    asyncio.run(tick())
+    with session_factory("m1")() as db:
+        row = db.scalars(select(OutboxEvent)).one()
+        assert row.status == "UNKNOWN"
+    m1_client.app.state.test_clock.write_text("2026-01-01T00:00:06Z", encoding="utf-8")
+    asyncio.run(tick())
+    with session_factory("m1")() as db:
+        assert db.scalars(select(OutboxEvent)).one().status == "SENT"
+    writes = [payload for function, payload in calls if function == "send_notification"]
+    assert len(writes) == 2 and writes[0] == writes[1]
+    assert len(received) == 1
 
 
 def test_check_in_uses_daily_code_window_version_and_permission(m1_client, user_headers):

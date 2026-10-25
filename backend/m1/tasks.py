@@ -86,17 +86,25 @@ async def _deliver_outbox() -> None:
                 if event.status == "PENDING":
                     function = "send_notification" if event.kind == "NOTIFICATION" else "audit"
                     await call_peer(settings, "d", function, event.payload, Actor("SYSTEM"))
-                elif event.kind == "NOTIFICATION":
-                    await call_peer(settings, "d", "get_notification", {"requestId": event.request_id}, Actor("SYSTEM"))
                 else:
-                    await call_peer(settings, "d", "audit", {
-                        "operation": "GET", "requestId": event.request_id, "sourceModule": "M1"
-                    }, Actor("SYSTEM"))
+                    try:
+                        if event.kind == "NOTIFICATION":
+                            await call_peer(settings, "d", "get_notification", {"requestId": event.request_id}, Actor("SYSTEM"))
+                        else:
+                            await call_peer(settings, "d", "audit", {
+                                "operation": "GET", "requestId": event.request_id, "sourceModule": "M1"
+                            }, Actor("SYSTEM"))
+                    except ApiError as exc:
+                        if exc.code != "NOT_FOUND":
+                            raise
+                        # 查询暂不可见不证明原请求失败；以原编号及原输入重试，由D幂等去重。
+                        function = "send_notification" if event.kind == "NOTIFICATION" else "audit"
+                        await call_peer(settings, "d", function, event.payload, Actor("SYSTEM"))
                 event.status = "SENT"
                 event.last_error = ""
             except ApiError as exc:
                 event.last_error = exc.code
-                if exc.code == "UNAVAILABLE" or (event.status == "UNKNOWN" and exc.code == "NOT_FOUND"):
+                if exc.code in {"UNAVAILABLE", "INTERNAL_ERROR"} or (event.status == "UNKNOWN" and exc.code == "NOT_FOUND"):
                     event.status = "UNKNOWN"
                     event.next_attempt_at = now + timedelta(seconds=5)
                 else:
