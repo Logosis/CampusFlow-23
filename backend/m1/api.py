@@ -1162,13 +1162,13 @@ async def change_room_limit(input: ChangeRoomLimitInput, request: Request):
                                 )
                             queue_audit(
                                 db, f"m1-audit-maintenance-{input.requestId}-{reservation.reservation_id}",
-                                "SYSTEM", "M3", "RESERVATION", reservation.reservation_id,
+                                "SYSTEM", "M1", "RESERVATION", reservation.reservation_id,
                                 reservation.space_id, "CANCEL_MAINTENANCE", "SUCCESS",
                                 "教室维修取消个人预约且不记违约", now,
                             )
                     request_row = _add_limit_request(db, input, input_hash, "SUCCESS", "", now)
                     queue_audit(
-                        db, f"m1-audit-limit-{input.source.lower()}-{input.requestId}", "SYSTEM", input.source,
+                        db, f"m1-audit-limit-{input.source.lower()}-{input.requestId}", "SYSTEM", "M1",
                         "ROOM_LIMIT", input.businessId, input.spaceId, input.action, "SUCCESS",
                         f"处理{input.source}来源教室限制", now,
                     )

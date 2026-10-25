@@ -125,7 +125,7 @@ def record_event(session, w, kind, actor, summary, data=None):
         occurred_at=utc_now(), version=w.version, summary=summary, data=data or {})
     session.add(record)
     add_job(session, w, 'AUDIT', dict(operation='APPEND', sourceModule='M3',
-        actorType='USER' if actor else 'SYSTEM', actorId=actor or 'm3',
+        actorType='USER' if actor else 'SYSTEM', actorId=actor or 'M3',
         objectType='WORK_ORDER', businessId=w.id, spaceId=w.space_id, action=kind,
         occurredAt=format_time(record.occurred_at), result='SUCCESS', summary=summary), record.id)
     return record

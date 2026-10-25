@@ -149,6 +149,8 @@ def test_config_update_is_idempotent_and_rejects_stale_version(client, world):
     world.permission_override["u-admin"] = {"m2.config.manage": True}
     body = good_config(base["version"])
     first = update_config(client, body)
+    from backend.d.audit_schemas import AuditAppendInput
+    AuditAppendInput.model_validate({"operation": "APPEND", **calls_of(world, "d", "audit")[-1]})
     again = update_config(client, body)
     assert again == first
     assert update_config(client, dict(body, requestId=new_rid()), expected=409)["code"] == "CONFLICT"
@@ -170,6 +172,9 @@ def test_submit_creates_pending_first_level_and_notifies(client, world):
     assert notes[0]["sourceModule"] == "M2" and notes[0]["businessId"] == application["applicationId"]
     audits = calls_of(world, "d", "audit")
     assert audits and audits[0]["action"] == "SUBMIT_APPLICATION"
+    from backend.d.audit_schemas import AuditAppendInput
+    event = AuditAppendInput.model_validate({"operation": "APPEND", **audits[0]})
+    assert event.actorType == "USER" and event.actorId == "u-student1"
     # 提交阶段不应写回整室占用
     assert calls_of(world, "m1", "change_room_limit") == []
 

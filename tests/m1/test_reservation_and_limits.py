@@ -78,6 +78,16 @@ def test_m3_repair_cancels_personal_booking_but_preserves_m2_limit(m1_client, us
     after = call(m1_client, "get_room_availability", {"spaceId": "sp-school", **period(6, 7)},
                  module_headers("m2"))
     assert after["blockedBy"] == ["M2"]
+    # 使用真实D输入模型检查调用方生成的审计，不让宽松替身掩盖契约冲突。
+    from sqlalchemy import select
+    from backend.d.audit_schemas import AuditAppendInput
+    from backend.m1.models import OutboxEvent
+    from backend.shared.db import session_factory
+    with session_factory("m1")() as db:
+        audits = list(db.scalars(select(OutboxEvent).where(OutboxEvent.kind == "AUDIT")))
+        assert any(event.payload["action"] == "CANCEL_MAINTENANCE" for event in audits)
+        for event in audits:
+            AuditAppendInput.model_validate(event.payload)
 
 
 def test_release_tombstone_prevents_late_repair_and_forged_source(m1_client, module_headers):

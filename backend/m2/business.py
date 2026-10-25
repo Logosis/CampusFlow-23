@@ -438,14 +438,15 @@ def _notification_body(kind: str, application: Application) -> str:
 
 
 async def queue_audit(db: Session, action: str, application: Application | None,
-                      result: str, summary: str, *, request_id: str | None = None) -> None:
+                      result: str, summary: str, *, request_id: str | None = None,
+                      actor_id: str | None = None) -> None:
     payload = {
         "requestId": request_id or new_id(),
         "sourceModule": "M2",
-        "actorType": "SYSTEM",
-        "actorId": None,
+        "actorType": "USER" if actor_id else "SYSTEM",
+        "actorId": actor_id or "M2",
         "objectType": "M2_APPLICATION",
-        "businessId": application.application_id if application is not None else "",
+        "businessId": application.application_id if application is not None else "m2-approval-config",
         "spaceId": application.space_id if application is not None else None,
         "action": action,
         "occurredAt": format_time(now()),

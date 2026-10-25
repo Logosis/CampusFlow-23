@@ -179,7 +179,8 @@ async def submit_application(payload: dict, caller: core.Caller) -> dict:
         db.add(application)
         db.flush()
         await _notify(db, application, core.KIND_PENDING, [first])
-        await core.queue_audit(db, "SUBMIT_APPLICATION", application, "SUCCESS", "提交整教室预约申请")
+        await core.queue_audit(db, "SUBMIT_APPLICATION", application, "SUCCESS", "提交整教室预约申请",
+                               actor_id=caller.user_id)
         result = core.application_view(db, application)
         guard.store(db, result)
         db.commit()
@@ -283,7 +284,7 @@ async def submit_approval(payload: dict, caller: core.Caller) -> dict:
         db.commit()
 
     result = await _after_decision(application_id, sync_id, level, reject, last_level,
-                                   payload["decision"])
+                                   payload["decision"], caller)
     with core.session() as db:
         core.RequestGuard("submit_approval", payload["requestId"], payload).store(db, result)
         db.commit()
@@ -342,7 +343,7 @@ async def _apply_sync(db, application: Application, sync: SeatSync) -> None:
 
 
 async def _after_decision(application_id: str, sync_id: int | None, level: int,
-                          reject: bool, last_level: bool, decision: str) -> dict:
+                          reject: bool, last_level: bool, decision: str, caller: core.Caller) -> dict:
     """决定落库后：通知相关方、记审计、回填结果；通知失败不影响业务状态。"""
     with core.session() as db:
         application = core.load_application(db, application_id, lock=True)
@@ -356,7 +357,7 @@ async def _after_decision(application_id: str, sync_id: int | None, level: int,
             if nxt:
                 await _notify(db, application, core.KIND_PENDING, [nxt])
         await core.queue_audit(db, "SUBMIT_APPROVAL", application, "SUCCESS",
-                               f"第{level}级审批 {decision}")
+                               f"第{level}级审批 {decision}", actor_id=caller.user_id)
         result = core.application_view(db, application)
         db.commit()
     return result
@@ -455,7 +456,8 @@ async def cancel_application(payload: dict, caller: core.Caller) -> dict:
         db.flush()
         await _apply_sync(db, application, sync)
         await _notify(db, application, core.KIND_CANCELLED, [application.applicant_id])
-        await core.queue_audit(db, "CANCEL_APPLICATION", application, "SUCCESS", "申请人主动撤销")
+        await core.queue_audit(db, "CANCEL_APPLICATION", application, "SUCCESS", "申请人主动撤销",
+                               actor_id=caller.user_id)
         result = core.application_view(db, application)
         guard.store(db, result)
         db.commit()
@@ -500,9 +502,9 @@ async def update_approval_config(payload: dict, caller: core.Caller) -> dict:
         "requestId": core.new_id(),
         "sourceModule": "M2",
         "actorType": "USER" if caller.is_user else "SYSTEM",
-        "actorId": caller.user_id,
+        "actorId": caller.user_id if caller.is_user else "M2",
         "objectType": "M2_APPROVAL_CONFIG",
-        "businessId": "",
+        "businessId": "m2-approval-config",
         "spaceId": None,
         "action": "UPDATE_APPROVAL_CONFIG",
         "occurredAt": format_time(core.now()),

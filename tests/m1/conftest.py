@@ -87,6 +87,9 @@ def m1_client(tmp_path: Path, monkeypatch):
         if function == "get_notification":
             return {"notificationId": "notification", "requestId": payload["requestId"]}
         if function == "audit":
+            if payload.get("operation") == "APPEND":
+                from backend.d.audit_schemas import AuditAppendInput
+                AuditAppendInput.model_validate(payload)
             return {"auditId": f"audit-{payload['requestId']}"}
         if function == "maintain_master":
             if payload["operation"] == "UPDATE_SEAT":

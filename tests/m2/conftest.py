@@ -191,7 +191,9 @@ def world(monkeypatch) -> FakeWorld:
         fake.calls.append(("d", "audit", payload))
         if fake.audit_error:
             raise ApiError("UNAVAILABLE", "审计服务不可用")
-        return {"auditId": "a-" + payload["requestId"], **payload, "verifiedBy": "D"}
+        from backend.d.audit_schemas import AuditAppendInput
+        event = AuditAppendInput.model_validate({"operation": "APPEND", **payload})
+        return {"auditId": "a-" + payload["requestId"], **event.model_dump(exclude={"operation"}), "verifiedBy": "M2"}
 
     async def identity_call(settings, target, function, payload, actor, **kwargs):
         fake.calls.append((target, "get_identity", {"mode": actor.mode}))
